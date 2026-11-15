@@ -33,7 +33,8 @@ final class Renderer: NSObject, MTKViewDelegate {
     let patches: PatchCache
     /// Radii per meter of elevation, with exaggeration.
     private let scale: Float
-    private let floorRadius: Float
+    /// The camera stays at least this far from the center, in radii.
+    let floorRadius: Float
     private var viewportHeight: Float = 800
 
     private var position = SIMD3<Float>(0, 0, 3)
@@ -268,7 +269,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         let colorDescriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .bgra8Unorm_srgb, width: width, height: height, mipmapped: false)
-        colorDescriptor.usage = .renderTarget
+        colorDescriptor.usage = [.renderTarget, .pixelFormatView]
         colorDescriptor.storageMode = .shared
         let depthDescriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .depth32Float, width: width, height: height, mipmapped: false)

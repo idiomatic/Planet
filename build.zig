@@ -14,6 +14,7 @@ const swift_sources = [_][]const u8{
     "app/Sources/Renderer.swift",
     "app/Sources/Shaders.swift",
     "app/Sources/Snapshot.swift",
+    "app/Sources/Video.swift",
 };
 
 pub fn build(b: *std.Build) void {

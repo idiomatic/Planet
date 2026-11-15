@@ -40,12 +40,19 @@ struct LaunchOptions {
 
         Snapshot:
           --snapshot <png>       render one frame to a PNG and exit, without a window
-          --size <w>x<h>         snapshot or benchmark size in pixels (default 1280x800,
-                                 or 2560x1600 for a benchmark)
+          --size <w>x<h>         snapshot, benchmark, or video size in pixels (default
+                                 1280x800, 2560x1600 for a benchmark, 1920x1080 for a video)
 
         Benchmark:
           --benchmark <frames>   render frames offscreen (no window or vsync) from orbit to
                                  the surface, print timings and memory, and exit
+
+        Video:
+          --video <mp4>          render a looping flight over the sunlit side (through the
+                                 highest peak) to an H.264 video, and exit
+          --duration <seconds>   video length (default 120)
+          --fps <n>              video frame rate (default 60)
+          --bitrate <Mbps>       video bit rate (default 12)
 
           --help, -h             show this help and exit
         """
@@ -54,7 +61,7 @@ struct LaunchOptions {
         "--seed", "--radius", "--exaggeration", "--region-scale", "--sea-level", "--tilt", "--day",
         "--year", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--mesh",
         "--lod-blend", "--snapshot",
-        "--size", "--benchmark",
+        "--size", "--benchmark", "--video", "--duration", "--fps", "--bitrate",
     ]
 
     /// Prints usage and exits for `--help` or `-h`, or for an unknown switch (to stderr, status 2).
@@ -79,8 +86,14 @@ struct LaunchOptions {
     var benchmarkFrames: Int?
     private var sizeGiven = false
 
+    var video: String?
+    var duration = 120.0
+    var fps = 60
+    var bitrate = 12.0
+
     /// A benchmark defaults to a Retina-sized 1280×800-point window.
     var benchmarkSize: (Int, Int) { sizeGiven ? (size[0], size[1]) : (2560, 1600) }
+    var videoSize: (Int, Int) { sizeGiven ? (size[0], size[1]) : (1920, 1080) }
     private var peak = false
     private var target: SIMD3<Float> = .zero
     private var distance: Float?
@@ -114,6 +127,10 @@ struct LaunchOptions {
         blendLevels = value("--lod-blend") != "off"
         snapshot = value("--snapshot")
         benchmarkFrames = value("--benchmark").flatMap(Int.init).map { max($0, 1) }
+        video = value("--video")
+        number("--duration") { duration = max($0, 1 / 60) }
+        if let f = value("--fps").flatMap(Int.init) { fps = min(max(f, 1), 240) }
+        number("--bitrate") { bitrate = max($0, 0.1) }
         if let s = value("--size")?.split(separator: "x").compactMap({ Int($0) }), s.count == 2 {
             size = s
             sizeGiven = true

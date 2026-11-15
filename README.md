@@ -37,6 +37,13 @@ To render a still without opening a window, as for the image above:
   --snapshot docs/perihelion.png --seed perihelion --direction 1,0.3,1
 ```
 
+To render a looping flight video (2 minutes at 1080p60 takes about a minute on an M2):
+
+```sh
+"zig-out/Uncanny Planet.app/Contents/MacOS/Uncanny Planet" \
+  --seed perihelion --exaggeration 5000 --video demo.mp4
+```
+
 The elevation is a placeholder (warped fractal noise) until tectonics lands.
 
 ## Performance
