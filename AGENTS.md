@@ -48,6 +48,7 @@ Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usa
 * command-line switches set the parameters, initial camera, and controls (time speed), skip the panel, and generate at launch; every switch takes a value, since AppKit opens a bare argument as a file and then shows no window (defined in [app/Sources/LaunchOptions.swift](app/Sources/LaunchOptions.swift))
 * `--help` or `-h` prints usage and exits; an unknown switch prints usage to stderr and exits with status 2
 * `--snapshot <png>` instead renders one frame offscreen and exits
+* `--benchmark <frames>` instead renders frames offscreen (no window or vsync, default 2560×1600) from orbit to the surface, prints generation time, frame times, fps, and memory footprint, and exits
 
 ## Mesh
 

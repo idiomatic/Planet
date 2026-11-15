@@ -39,6 +39,20 @@ To render a still without opening a window, as for the image above:
 
 The elevation is a placeholder (warped fractal noise) until tectonics lands.
 
+## Performance
+
+`--benchmark <frames>` renders offscreen from orbit to the surface and reports timings and memory. On an Apple M2 (10-core GPU), release builds (`zig build -Drelease -Dcoarse-level=N`), 300 frames at 2560×1600:
+
+| Level | Vertices | Generation | GPU frame (mesh off / on) | fps, unsynced (off / on) | Peak memory (off / on) |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 6 | 40,962 | 22 ms | 0.69 / 0.73 ms | 1,032 / 961 | 63 / 70 MB |
+| 7 | 163,842 | 78 ms | 0.82 / 1.29 ms | 858 / 611 | 121 / 143 MB |
+| 8 | 655,362 | 251 ms | 1.67 / 4.25 ms | 484 / 213 | 338 / 421 MB |
+| 9 | 2,621,442 | 975 ms | 5.13 / 15.4 ms | 167 / 61 | 1.2 / 1.4 GB |
+| 10 | 10,485,762 | 4.1 s | 15.7 / 55.6 ms | 61 / 18 | 4.0 / 4.0 GB |
+
+Memory grows about 4× per level, as the vertex count does. Most of it is the core's generation leftovers: it keeps about 266 bytes per vertex (the midpoint map, f64 points, and grown-and-discarded arrays all stay in its arena), where the outputs need about 48. A functional pipeline with per-stage scratch arenas fixes that; its own cost, keeping each stage's output rather than overwriting, is a few bytes per vertex, and it doesn't change frame time, since static stages run once at generation. The mesh overlay costs little at the default level but triples GPU time from level 8 up.
+
 ## Design notes
 
 * **Reproducible planets.** Generation is deterministic, so a seed and its parameters fully describe a planet; there's nothing to save or export.

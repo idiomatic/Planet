@@ -209,33 +209,10 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     /// Renders one frame offscreen from the current camera.
     func snapshot(width: Int, height: Int) -> CGImage? {
-        aspect = Float(width) / Float(height)
-
-        let colorDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .bgra8Unorm_srgb, width: width, height: height, mipmapped: false)
-        colorDescriptor.usage = .renderTarget
-        colorDescriptor.storageMode = .shared
-        let depthDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .depth32Float, width: width, height: height, mipmapped: false)
-        depthDescriptor.usage = .renderTarget
-        depthDescriptor.storageMode = .private
-        guard let color = device.makeTexture(descriptor: colorDescriptor),
-              let depth = device.makeTexture(descriptor: depthDescriptor),
-              let commands = queue.makeCommandBuffer()
+        guard let pass = offscreenPass(width: width, height: height),
+              renderOffscreen(pass) != nil,
+              let color = pass.colorAttachments[0].texture
         else { return nil }
-
-        let pass = MTLRenderPassDescriptor()
-        pass.colorAttachments[0].texture = color
-        pass.colorAttachments[0].loadAction = .clear
-        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
-        pass.colorAttachments[0].storeAction = .store
-        pass.depthAttachment.texture = depth
-        pass.depthAttachment.loadAction = .clear
-        pass.depthAttachment.clearDepth = 0
-        pass.depthAttachment.storeAction = .dontCare
-        encode(commands, pass)
-        commands.commit()
-        commands.waitUntilCompleted()
 
         let bytesPerRow = width * 4
         var pixels = [UInt8](repeating: 0, count: bytesPerRow * height)
@@ -248,6 +225,43 @@ final class Renderer: NSObject, MTKViewDelegate {
                 | CGImageAlphaInfo.noneSkipFirst.rawValue),
             provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent
         )
+    }
+
+    /// Renders one frame into `pass` and waits for it; returns the completed command buffer.
+    func renderOffscreen(_ pass: MTLRenderPassDescriptor) -> MTLCommandBuffer? {
+        guard let commands = queue.makeCommandBuffer() else { return nil }
+        encode(commands, pass)
+        commands.commit()
+        commands.waitUntilCompleted()
+        return commands
+    }
+
+    /// A render pass with offscreen color and depth targets, and the aspect set to match.
+    func offscreenPass(width: Int, height: Int) -> MTLRenderPassDescriptor? {
+        aspect = Float(width) / Float(height)
+
+        let colorDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .bgra8Unorm_srgb, width: width, height: height, mipmapped: false)
+        colorDescriptor.usage = .renderTarget
+        colorDescriptor.storageMode = .shared
+        let depthDescriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .depth32Float, width: width, height: height, mipmapped: false)
+        depthDescriptor.usage = .renderTarget
+        depthDescriptor.storageMode = .private
+        guard let color = device.makeTexture(descriptor: colorDescriptor),
+              let depth = device.makeTexture(descriptor: depthDescriptor)
+        else { return nil }
+
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = color
+        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+        pass.colorAttachments[0].storeAction = .store
+        pass.depthAttachment.texture = depth
+        pass.depthAttachment.loadAction = .clear
+        pass.depthAttachment.clearDepth = 0
+        pass.depthAttachment.storeAction = .dontCare
+        return pass
     }
 
     private func encode(_ commands: MTLCommandBuffer, _ pass: MTLRenderPassDescriptor) {

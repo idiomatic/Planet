@@ -39,7 +39,12 @@ struct LaunchOptions {
 
         Snapshot:
           --snapshot <png>       render one frame to a PNG and exit, without a window
-          --size <w>x<h>         snapshot size in pixels (default 1280x800)
+          --size <w>x<h>         snapshot or benchmark size in pixels (default 1280x800,
+                                 or 2560x1600 for a benchmark)
+
+        Benchmark:
+          --benchmark <frames>   render frames offscreen (no window or vsync) from orbit to
+                                 the surface, print timings and memory, and exit
 
           --help, -h             show this help and exit
         """
@@ -47,7 +52,7 @@ struct LaunchOptions {
     private static let switches: Set = [
         "--seed", "--radius", "--exaggeration", "--region-scale", "--sea-level", "--tilt", "--day",
         "--year", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--mesh", "--snapshot",
-        "--size",
+        "--size", "--benchmark",
     ]
 
     /// Prints usage and exits for `--help` or `-h`, or for an unknown switch (to stderr, status 2).
@@ -68,6 +73,11 @@ struct LaunchOptions {
     var showMesh = false
     var snapshot: String?
     var size = [1280, 800]
+    var benchmarkFrames: Int?
+    private var sizeGiven = false
+
+    /// A benchmark defaults to a Retina-sized 1280×800-point window.
+    var benchmarkSize: (Int, Int) { sizeGiven ? (size[0], size[1]) : (2560, 1600) }
     private var peak = false
     private var target: SIMD3<Float> = .zero
     private var distance: Float?
@@ -99,7 +109,11 @@ struct LaunchOptions {
         timeSpeed = value("--time-speed").flatMap(Double.init)
         showMesh = value("--mesh") == "on"
         snapshot = value("--snapshot")
-        if let s = value("--size")?.split(separator: "x").compactMap({ Int($0) }), s.count == 2 { size = s }
+        benchmarkFrames = value("--benchmark").flatMap(Int.init).map { max($0, 1) }
+        if let s = value("--size")?.split(separator: "x").compactMap({ Int($0) }), s.count == 2 {
+            size = s
+            sizeGiven = true
+        }
         distance = value("--distance").flatMap(Float.init)
         if let d = vector(value("--direction")) { direction = normalize(d) }
         let lookAt = value("--look-at")

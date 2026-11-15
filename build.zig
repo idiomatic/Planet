@@ -3,6 +3,7 @@ const std = @import("std");
 const app_name = "Uncanny Planet";
 const swift_sources = [_][]const u8{
     "app/Sources/App.swift",
+    "app/Sources/Benchmark.swift",
     "app/Sources/ContentView.swift",
     "app/Sources/FlightView.swift",
     "app/Sources/LaunchOptions.swift",
