@@ -27,7 +27,7 @@ Procedurally generated Earth-like planet viewer for macOS. Planned features: [DE
 
 ## Parameters
 
-Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usable) before generation; defaults are Earth's.
+Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usable) before generation; defaults are Earth's. Each number has a slider (logarithmic for ratios, rounding to 3 significant digits; linear for sea level, 0–100, and tilt, 0–90°) beside an editable value, which may go beyond the slider's range.
 
 * seed (user-provided text; a decimal number is used as is, other text is hashed with FNV-1a)
 * planet radius scale (% of Earth)
