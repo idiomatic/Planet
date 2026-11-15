@@ -48,7 +48,7 @@ To render a looping flight video (2 minutes at 1080p60 takes about a minute on a
   --seed perihelion --exaggeration 5000 --video demo.mp4
 ```
 
-The demo above was rendered at 50 Mbps, then re-encoded with x264 to fit the repository (SSIM 0.996 and PSNR 50 dB against the master):
+The demo above was rendered at 50 Mbps, then re-encoded with x264 to fit the repository (SSIM 0.996 and PSNR 50 dB against the master). [docs/demo.md](docs/demo.md) has the full directions for re-recording it: the flight's design, the poster frame, and the checks.
 
 ```sh
 Planet --seed perihelion --exaggeration 5000 --video master.mp4 --bitrate 50
