@@ -36,10 +36,10 @@ Generation parameters (the sidebar's Planet section), applied by Generate or Ret
 
 Live parameters (the View section), which change only the view, so they apply as they change, and switches set their starting values; they persist across generated planets:
 
-* radial exaggeration (%, 1–1,000,000; keys `-` and `=`, four steps of 2^¼ doubling or halving), relative to the planet's own radius: 100% gives Earth's proportions at any size
+* radial exaggeration (%, 0–1,000,000; keys `-` and `=`, four steps of 2^¼ doubling or halving, `=` from 0 going to 10%), relative to the planet's own radius: 100% gives Earth's proportions at any size, 0 a smooth ball
 * sea level (% of the surface elevation range, from lowest to highest; default 55%)
-* air density (relative to Earth, 0–100; keys `[` and `]`; 0 is no atmosphere): H turns it off and back on to its last nonzero value; its logarithmic slider (0.01–100) reaches 0 at its leftmost position
-* axial tilt (degrees), day length and year length (relative to Earth): the sun's direction is a pure function of these and time (`pl_sun_direction`)
+* air density (relative to Earth, 0–100; keys `[` and `]`; 0 is no atmosphere): H turns it off and back on to its last nonzero value; its logarithmic slider (0.01–100) reaches 0 at its leftmost position, as relief's, day length's, and year length's do (region scale, detail, and exposure have no meaningful 0)
+* axial tilt (degrees), day length and year length (relative to Earth; 0 is no spin, so the sun holds still in the sky, or no orbit, so no seasons; with day length 0 the day readout shows —): the sun's direction is a pure function of these and time (`pl_sun_direction`)
 * detail (pixels): patches are refined while their triangles exceed it (default 12)
 * exposure (default 0.25) and vertical field of view (degrees, default 60)
 * planet radius (% of Earth; last, and disabled in the sidebar, so set only by `--radius`): the core's Earth-scale elevations scale with it, so it changes only lengths in kilometers (readouts), not the view
@@ -79,7 +79,7 @@ Exaggeration and sea level move the surface, so changing them refits the cached 
 ## Atmosphere
 
 * single scattering, raymarched in the shaders, with Earth's Rayleigh (8 km scale height) and Mie (1.2 km, g = 0.8) coefficients, scaled by the air density parameter, up to 60 km; sunlight reaching each sample is attenuated through the air (6 steps) and blocked by the planet
-* the air sees a planet whose radius is the true radius divided by the exaggeration, so its thickness keeps its proportion to the exaggerated relief while its vertical optical depth stays Earth's
+* the air sees a planet whose radius is the true radius divided by the exaggeration (taken as at least 100%), so above Earth's relief its thickness keeps its proportion to the exaggerated relief while its vertical optical depth stays Earth's; below it, flattening the terrain leaves Earth's air, which also keeps the air thick enough in radii for single-precision heights near radius 1
 * terrain: lit by sunlight through the air, a little skylight while the sun is up, and starlight; then aerial perspective (haze) along the view ray (12 steps)
 * sky: a full-screen pass at the far plane, drawn after the terrain where only the background remains (32 steps), with the sun's disk; view directions come from the camera's basis and field of view, since unprojecting the near plane (~1e-6 radii away near the ground) loses precision and breaks the sky into blocks
 * samples are offset per pixel by interleaved gradient noise, trading banding for fine noise; radiance is tone-mapped (1 − e^(−0.25·L))

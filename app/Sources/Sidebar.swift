@@ -58,12 +58,12 @@ struct Sidebar: View {
                 Divider()
                 Text("View").font(.headline)
                 VStack(alignment: .leading, spacing: 10) {
-                    row("Relief (%)", $settings.values.exaggeration, .logarithmic(10...100_000), earth: ViewValues.earth.exaggeration)
+                    row("Relief (%)", $settings.values.exaggeration, .logarithmic(10...100_000, zeroAtStart: true), earth: ViewValues.earth.exaggeration)
                     row("Sea level (% of elevation range)", $settings.values.seaLevel, .linear(0...100), earth: ViewValues.earth.seaLevel)
                     row("Air density (× Earth)", $settings.values.airDensity, .logarithmic(0.01...100, zeroAtStart: true), earth: ViewValues.earth.airDensity)
                     row("Axial tilt (°)", $settings.values.axialTilt, .linear(0...90), earth: ViewValues.earth.axialTilt)
-                    row("Day length (× Earth)", $settings.values.dayLength, .logarithmic(0.01...100), earth: ViewValues.earth.dayLength)
-                    row("Year length (× Earth)", $settings.values.yearLength, .logarithmic(0.01...100), earth: ViewValues.earth.yearLength)
+                    row("Day length (× Earth)", $settings.values.dayLength, .logarithmic(0.01...100, zeroAtStart: true), earth: ViewValues.earth.dayLength)
+                    row("Year length (× Earth)", $settings.values.yearLength, .logarithmic(0.01...100, zeroAtStart: true), earth: ViewValues.earth.yearLength)
                     row("Detail (pixels; smaller is finer)", $settings.values.detail, .logarithmic(3...48), earth: ViewValues.earth.detail)
                     row("Exposure", $settings.values.exposure, .logarithmic(0.05...2), earth: ViewValues.earth.exposure)
                     row("Field of view (°)", $settings.values.fieldOfView, .linear(10...120), earth: ViewValues.earth.fieldOfView)
@@ -83,7 +83,7 @@ struct Sidebar: View {
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 3) {
                     readout("Seed", current?.seed ?? "")
                     readout("Time", readouts.timeSpeed.formatted(.number.precision(.fractionLength(0))) + "%")
-                    readout("Day", String(format: "%.2f", readouts.day))
+                    readout("Day", readouts.day.isNaN ? "—" : String(format: "%.2f", readouts.day))
                     readout("Altitude", readouts.altitude.formatted(.number.precision(.fractionLength(0))) + " km")
                     readout("Patches", "\(readouts.patchesDrawn) drawn, \(readouts.patchesCached) cached")
                 }

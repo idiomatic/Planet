@@ -99,8 +99,9 @@ pub const Planet = struct {
 /// of the orbit, so tilt, day length, and year length can change while time runs.
 pub fn sunFromOrbit(axial_tilt: f64, day_length: f64, year_length: f64, seconds: f64) Vec {
     const tau = 2.0 * std.math.pi;
-    const orbit = tau * seconds / (earth_year * @max(year_length, 0.001));
-    const spin = tau * seconds / (earth_day * @max(day_length, 0.001));
+    // A length of 0 means no orbit (no seasons) or no spin (the sun holds still in the sky).
+    const orbit = if (year_length > 0) tau * seconds / (earth_year * year_length) else 0;
+    const spin = if (day_length > 0) tau * seconds / (earth_day * day_length) else 0;
     const tilt = std.math.degreesToRadians(axial_tilt);
     // Ecliptic: the orbit lies in x–z, with the planet's axis tilted toward +z.
     const s: Vec = .{ @cos(orbit), 0, @sin(orbit) };
@@ -694,6 +695,12 @@ test "patch indices stay in range" {
     var indices: [patch_indices]u32 = undefined;
     patchIndexPattern(&indices);
     for (indices) |i| try std.testing.expect(i < patch_vertices);
+}
+
+test "a day or year length of 0 stops the spin or the orbit" {
+    const still = sunFromOrbit(23.44, 0, 0, 1e7);
+    const start = sunFromOrbit(23.44, 0, 0, 0);
+    for (0..3) |k| try std.testing.expectEqual(start[k], still[k]);
 }
 
 test "seeds from text" {

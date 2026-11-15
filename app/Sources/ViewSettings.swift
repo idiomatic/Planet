@@ -5,7 +5,8 @@ import simd
 /// Live parameters and render settings: they change only the view, so they can change while
 /// flying. Percentages are in percent; defaults are Earth's.
 struct ViewValues: Equatable {
-    /// Radial exaggeration (%), relative to the planet's radius: 100% is Earth's proportions.
+    /// Radial exaggeration (%), relative to the planet's radius: 100% is Earth's proportions;
+    /// 0 is a smooth ball.
     var exaggeration = 100.0
     /// Planet radius (% of Earth). Relief scales with it, so it changes only lengths in km.
     var radiusScale = 100.0
@@ -30,13 +31,13 @@ struct ViewValues: Equatable {
 
     /// Ranges the values are clamped to.
     mutating func clamp() {
-        exaggeration = min(max(exaggeration, 1), 1_000_000)
+        exaggeration = min(max(exaggeration, 0), 1_000_000)
         radiusScale = min(max(radiusScale, 0.01), 100_000)
         seaLevel = min(max(seaLevel, 0), 100)
         airDensity = min(max(airDensity, 0), 100)
         axialTilt = min(max(axialTilt, -180), 180)
-        dayLength = max(dayLength, 0.001)
-        yearLength = max(yearLength, 0.001)
+        dayLength = max(dayLength, 0) // 0: no spin
+        yearLength = max(yearLength, 0) // 0: no orbit
         detail = min(max(detail, 2), 200)
         exposure = min(max(exposure, 0.01), 10)
         fieldOfView = min(max(fieldOfView, 5), 150)

@@ -34,6 +34,15 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// doesn't enter: 100% gives Earth's proportions at any size.
     private var scale: Float { Renderer.scale(values) }
 
+    /// The air's scale: the display's, but never below relief 100%, so flattening the terrain
+    /// (down to a smooth ball, at 0) leaves Earth's air, which also keeps the air thick enough
+    /// in radii for single-precision heights near radius 1.
+    private var airScale: Float {
+        var values = values
+        values.exaggeration = max(values.exaggeration, 100)
+        return Renderer.scale(values)
+    }
+
     private static func scale(_ values: ViewValues) -> Float {
         Float(values.exaggeration / 100 / ViewValues.earth.radius)
     }
@@ -221,7 +230,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         case "-":
             settings.values.exaggeration /= Renderer.liveStep
         case "=":
-            settings.values.exaggeration *= Renderer.liveStep
+            settings.values.exaggeration = values.exaggeration > 0 ? values.exaggeration * Renderer.liveStep : 10
         case ",":
             if !repeated { timeSpeed = timeSpeed > 1 ? max(timeSpeed / 10, 1) : 0 }
         case ".":
@@ -256,7 +265,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     private func updateReadouts() {
         readouts.timeSpeed = timeSpeed
-        readouts.day = simulatedSeconds / (86_400 * values.dayLength)
+        readouts.day = values.dayLength > 0 ? simulatedSeconds / (86_400 * values.dayLength) : .nan
         readouts.altitude = Double(length(position) - 1) * values.radius / 1000
         readouts.patchesDrawn = patches.drawn
         readouts.patchesCached = patches.cachedCount
@@ -386,9 +395,9 @@ final class Renderer: NSObject, MTKViewDelegate {
             camera: SIMD4(position, Float(values.airDensity)),
             lod: SIMD4(pixelsPerRadian, patches.targetPixels, blendLevels ? 1 : 0, 0.5),
             // The air sees a planet of radius 1 / scale meters, so its thickness keeps its
-            // proportion to the exaggerated relief.
+            // proportion to the exaggerated relief (but not below Earth's: see airScale).
             atmosphere: SIMD4(
-                values.airDensity > 0 ? 1 : 0, 1 / scale, 1 + Renderer.atmosphereHeight * scale,
+                values.airDensity > 0 ? 1 : 0, 1 / airScale, 1 + Renderer.atmosphereHeight * airScale,
                 Float(values.exposure))
         )
         let visible = patches.select(PatchView(
