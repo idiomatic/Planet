@@ -37,6 +37,7 @@ Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usa
 * axial tilt (degrees)
 * day length (relative to Earth)
 * year length (relative to Earth)
+* air density (relative to Earth; 0 for none), used only by the atmosphere so far
 
 ## Viewer
 
@@ -70,11 +71,11 @@ Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usa
 
 ## Atmosphere
 
-* single scattering, raymarched in the shaders, with Earth's Rayleigh (8 km scale height) and Mie (1.2 km, g = 0.8) coefficients, up to 60 km; sunlight reaching each sample is attenuated through the air (6 steps) and blocked by the planet
+* single scattering, raymarched in the shaders, with Earth's Rayleigh (8 km scale height) and Mie (1.2 km, g = 0.8) coefficients, scaled by the air density parameter, up to 60 km; sunlight reaching each sample is attenuated through the air (6 steps) and blocked by the planet
 * the air sees a planet whose radius is the true radius divided by the exaggeration, so its thickness keeps its proportion to the exaggerated relief while its vertical optical depth stays Earth's
 * terrain: lit by sunlight through the air, a little skylight while the sun is up, and starlight; then aerial perspective (haze) along the view ray (12 steps)
-* sky: a full-screen pass at the far plane, drawn after the terrain where only the background remains (32 steps), with the sun's disk
-* samples are offset per pixel by interleaved gradient noise, trading banding for fine noise; radiance is tone-mapped (1 − e^(−0.45·L))
+* sky: a full-screen pass at the far plane, drawn after the terrain where only the background remains (32 steps), with the sun's disk; view directions come from the camera's basis and field of view, since unprojecting the near plane (~1e-6 radii away near the ground) loses precision and breaks the sky into blocks
+* samples are offset per pixel by interleaved gradient noise, trading banding for fine noise; radiance is tone-mapped (1 − e^(−0.25·L))
 * H (or `--atmosphere on|off`) toggles it (default on); off renders exactly as before
 
 ## Elevation (placeholder until tectonics)

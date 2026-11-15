@@ -25,6 +25,7 @@ struct LaunchOptions {
           --tilt <degrees>       axial tilt (default 23.44)
           --day <× Earth>        day length (default 1)
           --year <× Earth>       year length (default 1)
+          --air <× Earth>        air density, for the atmosphere (default 1; 0 for none)
 
         Camera:
           --direction <x,y,z>    camera direction from the center (default 0,0,1)
@@ -61,7 +62,7 @@ struct LaunchOptions {
 
     private static let switches: Set = [
         "--seed", "--radius", "--exaggeration", "--region-scale", "--sea-level", "--tilt", "--day",
-        "--year", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--mesh",
+        "--year", "--air", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--mesh",
         "--lod-blend", "--atmosphere", "--snapshot",
         "--size", "--benchmark", "--video", "--duration", "--fps", "--bitrate",
     ]
@@ -124,6 +125,7 @@ struct LaunchOptions {
         number("--tilt") { parameters.axialTilt = $0 }
         number("--day") { parameters.dayLength = $0 }
         number("--year") { parameters.yearLength = $0 }
+        number("--air") { parameters.airDensity = max($0, 0) }
 
         timeSpeed = value("--time-speed").flatMap(Double.init)
         showMesh = value("--mesh") == "on"

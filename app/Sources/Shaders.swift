@@ -4,11 +4,13 @@ using namespace metal;
 
 struct Uniforms {
     float4x4 viewProjection;
-    float4x4 inverseViewProjection;
+    float4 cameraRight;   // xyz: camera's right, w: tan(half the horizontal field of view)
+    float4 cameraUp;      // xyz: camera's up, w: tan(half the vertical field of view)
+    float4 cameraForward; // xyz: camera's view direction
     float4 sun;        // xyz: unit vector toward the sun
     float4 elevation;  // x: min, y: sea level, z: max (meters); w: 1 when drawing mesh edges
     float4 display;    // x: radii per meter of elevation, with exaggeration
-    float4 camera;     // xyz: position, in radii
+    float4 camera;     // xyz: position, in radii; w: the air's density, relative to Earth's
     float4 lod;        // x: pixels per radian, y: split threshold in pixels, z: 1 to blend levels,
                        // w: blend band, as a fraction of the threshold
     float4 atmosphere; // x: 1 when on, y: meters per radius for the air (see Atmosphere below),
@@ -112,9 +114,9 @@ static float rayHits(float3 origin, float3 direction, float radius) {
 }
 
 // Rayleigh and Mie densities, relative to sea level.
-static float2 airDensity(float3 p, float metersPerRadius) {
+static float2 airDensity(float3 p, float metersPerRadius, float scale) {
     float height = max(length(p) - 1, 0.0) * metersPerRadius;
-    return exp(-height / float2(rayleighHeight, mieHeight));
+    return scale * exp(-height / float2(rayleighHeight, mieHeight));
 }
 
 static float3 extinction(float2 opticalDepth) {
@@ -122,13 +124,13 @@ static float3 extinction(float2 opticalDepth) {
 }
 
 // The fraction of sunlight reaching p, through the air (none where the planet is in the way).
-static float3 sunTransmittance(float3 p, float3 sun, float4 atmosphere) {
+static float3 sunTransmittance(float3 p, float3 sun, float4 atmosphere, float density) {
     if (rayHits(p, sun, 0.999) > 0) return 0;
     float length = raySphere(p, sun, atmosphere.z).y;
     float ds = length / sunSteps;
     float2 depth = 0;
     for (int i = 0; i < sunSteps; i++) {
-        depth += airDensity(p + sun * (ds * (i + 0.5)), atmosphere.y) * ds * atmosphere.y;
+        depth += airDensity(p + sun * (ds * (i + 0.5)), atmosphere.y, density) * ds * atmosphere.y;
     }
     return extinction(depth);
 }
@@ -141,7 +143,7 @@ struct Scattering {
 // Scattering along the ray from origin in direction (unit), up to maxDistance.
 // `jitter` (0...1, varying by pixel) offsets the samples, trading banding for fine noise.
 static Scattering scatter(float3 origin, float3 direction, float maxDistance, float3 sun, float4 atmosphere,
-                          int viewSteps, float jitter) {
+                          int viewSteps, float jitter, float density) {
     Scattering result = { float3(0), float3(1) };
     float2 air = raySphere(origin, direction, atmosphere.z);
     float start = max(air.x, 0.0);
@@ -154,12 +156,12 @@ static Scattering scatter(float3 origin, float3 direction, float maxDistance, fl
     float3 mie = 0;
     for (int i = 0; i < viewSteps; i++) {
         float3 p = origin + direction * (start + ds * (i + jitter));
-        float2 density = airDensity(p, atmosphere.y) * ds * atmosphere.y;
-        depth += density * 0.5;
-        float3 light = extinction(depth) * sunTransmittance(p, sun, atmosphere);
-        depth += density * 0.5;
-        rayleigh += density.x * light;
-        mie += density.y * light;
+        float2 amount = airDensity(p, atmosphere.y, density) * ds * atmosphere.y;
+        depth += amount * 0.5;
+        float3 light = extinction(depth) * sunTransmittance(p, sun, atmosphere, density);
+        depth += amount * 0.5;
+        rayleigh += amount.x * light;
+        mie += amount.y * light;
     }
     float mu = dot(direction, sun);
     float rayleighPhase = 3 / (16 * M_PI_F) * (1 + mu * mu);
@@ -190,7 +192,7 @@ fragment float4 fragmentMain(Fragment in [[stage_in]], constant Uniforms &u [[bu
 
     // Sunlight through the air, a little skylight while the sun is up, and starlight.
     float3 up = normalize(in.world);
-    float3 sunlight = sunIntensity / M_PI_F * sunTransmittance(in.world, sun, u.atmosphere);
+    float3 sunlight = sunIntensity / M_PI_F * sunTransmittance(in.world, sun, u.atmosphere, u.camera.w);
     float skylight = sunIntensity / M_PI_F * 0.06 * smoothstep(-0.15, 0.3, dot(up, sun))
         * (0.6 + 0.4 * dot(n, up));
     float3 radiance = albedo * (sunlight * light + skylight + 0.02);
@@ -199,7 +201,7 @@ fragment float4 fragmentMain(Fragment in [[stage_in]], constant Uniforms &u [[bu
     float3 toSurface = in.world - u.camera.xyz;
     float distance = length(toSurface);
     Scattering air = scatter(u.camera.xyz, toSurface / distance, distance, sun, u.atmosphere, 12,
-                             pixelNoise(in.position.xy));
+                             pixelNoise(in.position.xy), u.camera.w);
     return float4(toneMap(radiance * air.transmittance + air.inscattered, u.atmosphere.w), 1);
 }
 
@@ -218,14 +220,16 @@ vertex SkyFragment skyVertex(uint id [[vertex_id]]) {
 }
 
 fragment float4 skyFragment(SkyFragment in [[stage_in]], constant Uniforms &u [[buffer(1)]]) {
-    float4 near = u.inverseViewProjection * float4(in.ndc, 1, 1);
-    float3 direction = normalize(near.xyz / near.w - u.camera.xyz);
+    // From the camera's basis rather than by unprojecting the near plane, which near the ground
+    // lies ~1e-6 radii away, too close to subtract the camera's position precisely.
+    float3 direction = normalize(u.cameraForward.xyz + in.ndc.x * u.cameraRight.w * u.cameraRight.xyz
+                                 + in.ndc.y * u.cameraUp.w * u.cameraUp.xyz);
     float3 sun = u.sun.xyz;
     float ground = rayHits(u.camera.xyz, direction, 1);
     float maxDistance = ground > 0 ? ground : 1e30;
     // More samples than for the terrain: rays along the limb are long, and the sky covers less.
     Scattering air = scatter(u.camera.xyz, direction, maxDistance, sun, u.atmosphere, 32,
-                             pixelNoise(in.position.xy));
+                             pixelNoise(in.position.xy), u.camera.w);
     // The sun's disk (about 0.5° across), dimmed by the air.
     float3 disk = ground > 0 ? 0 : float3(smoothstep(0.99996, 0.99998, dot(direction, sun)) * 40);
     return float4(toneMap(air.inscattered + disk * air.transmittance, u.atmosphere.w), 1);

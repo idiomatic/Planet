@@ -37,6 +37,7 @@ struct ParameterPanel: View {
                 row("Axial tilt (°)", $parameters.axialTilt, .linear(0...90))
                 row("Day length (× Earth)", $parameters.dayLength, .logarithmic(0.01...100))
                 row("Year length (× Earth)", $parameters.yearLength, .logarithmic(0.01...100))
+                row("Air density (× Earth)", $parameters.airDensity, .logarithmic(0.01...100))
             }
             .textFieldStyle(.roundedBorder)
             .labelsHidden()

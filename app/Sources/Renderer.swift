@@ -71,7 +71,9 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     private struct Uniforms {
         var viewProjection: simd_float4x4
-        var inverseViewProjection: simd_float4x4
+        var cameraRight: SIMD4<Float>
+        var cameraUp: SIMD4<Float>
+        var cameraForward: SIMD4<Float>
         var sun: SIMD4<Float>
         var elevation: SIMD4<Float>
         var display: SIMD4<Float>
@@ -82,7 +84,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     /// The air's thickness above sea level, in meters, and the exposure for its tone mapping.
     private static let atmosphereHeight: Float = 60_000
-    private static let exposure: Float = 0.45
+    private static let exposure: Float = 0.25
 
     private let skyPipeline: MTLRenderPipelineState
     private let skyDepthState: MTLDepthStencilState
@@ -329,13 +331,16 @@ final class Renderer: NSObject, MTKViewDelegate {
         let view = simd_float4x4(orientation.inverse) * simd_float4x4(translation: -position)
         let viewProjection = projection * view
         let pixelsPerRadian = viewportHeight / (2 * tan(fovY / 2))
+        let tanHalfY = tan(fovY / 2)
         var uniforms = Uniforms(
             viewProjection: viewProjection,
-            inverseViewProjection: viewProjection.inverse,
+            cameraRight: SIMD4(orientation.act(SIMD3(1, 0, 0)), tanHalfY * aspect),
+            cameraUp: SIMD4(orientation.act(SIMD3(0, 1, 0)), tanHalfY),
+            cameraForward: SIMD4(orientation.act(SIMD3(0, 0, -1)), 0),
             sun: SIMD4(planet.sunDirection(at: simulatedSeconds), 0),
             elevation: SIMD4(planet.minElevation, planet.seaLevel, planet.maxElevation, 0),
             display: SIMD4(scale, 0, 0, 0),
-            camera: SIMD4(position, 0),
+            camera: SIMD4(position, Float(planet.parameters.airDensity)),
             lod: SIMD4(pixelsPerRadian, patches.targetPixels, blendLevels ? 1 : 0, 0.5),
             // The air sees a planet of radius 1 / scale meters, so its thickness keeps its
             // proportion to the exaggerated relief.

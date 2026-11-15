@@ -10,6 +10,8 @@ struct PlanetParameters: Equatable {
     var axialTilt = 23.44
     var dayLength = 1.0
     var yearLength = 1.0
+    /// The air's density relative to Earth's (display only, for now).
+    var airDensity = 1.0
 
     /// These parameters with Earth's values, keeping the seed.
     var earthlike: PlanetParameters {
