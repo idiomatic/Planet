@@ -6,28 +6,18 @@ const Vec = [3]f64;
 
 pub const coarse_level: u5 = build_options.coarse_level;
 
-const earth_radius = 6_371_000.0; // meters
 const earth_day = 86_400.0; // seconds
 const earth_year = 365.25 * earth_day;
 const elevation_amplitude = 8_000.0; // meters
 
+/// Exactly the inputs that generate a planet.
 pub const Params = extern struct {
     seed: u64,
-    radius_scale: f64,
     region_scale: f64,
-    sea_level: f64,
-    axial_tilt: f64,
-    day_length: f64,
-    year_length: f64,
 
     fn sanitized(self: Params) Params {
         var p = self;
-        p.radius_scale = @max(p.radius_scale, 0.01);
         p.region_scale = @max(p.region_scale, 1.0);
-        p.sea_level = std.math.clamp(p.sea_level, 0.0, 1.0);
-        p.axial_tilt = std.math.clamp(p.axial_tilt, -180.0, 180.0);
-        p.day_length = @max(p.day_length, 0.001);
-        p.year_length = @max(p.year_length, 0.001);
         return p;
     }
 };
@@ -39,7 +29,6 @@ pub const Planet = struct {
     elevations: []f32,
     addresses: []u64,
     indices: []u32,
-    sea_level: f32,
     min_elevation: f32,
     max_elevation: f32,
 
@@ -73,7 +62,6 @@ pub const Planet = struct {
             .elevations = elevations,
             .addresses = mesh.addresses.items,
             .indices = mesh.indices.items,
-            .sea_level = lo + @as(f32, @floatCast(p.sea_level)) * (hi - lo),
             .min_elevation = lo,
             .max_elevation = hi,
         };
@@ -86,13 +74,6 @@ pub const Planet = struct {
         arena.deinit();
     }
 
-    pub fn radius(self: *const Planet) f64 {
-        return earth_radius * self.params.radius_scale;
-    }
-
-    pub fn sunDirection(self: *const Planet, seconds: f64) Vec {
-        return sunFromOrbit(self.params.axial_tilt, self.params.day_length, self.params.year_length, seconds);
-    }
 };
 
 /// The unit vector toward the sun in the planet's frame, `seconds` after epoch: a pure function
@@ -509,14 +490,6 @@ export fn pl_planet_indices(handle: *const Handle) [*]const u32 {
     return planetOf(handle).indices.ptr;
 }
 
-export fn pl_planet_radius(handle: *const Handle) f64 {
-    return planetOf(handle).radius();
-}
-
-export fn pl_planet_sea_level(handle: *const Handle) f32 {
-    return planetOf(handle).sea_level;
-}
-
 export fn pl_planet_min_elevation(handle: *const Handle) f32 {
     return planetOf(handle).min_elevation;
 }
@@ -560,12 +533,7 @@ export fn pl_sun_direction(axial_tilt: f64, day_length: f64, year_length: f64, s
 
 const earth: Params = .{
     .seed = 42,
-    .radius_scale = 1,
     .region_scale = 1,
-    .sea_level = 0.55,
-    .axial_tilt = 23.44,
-    .day_length = 1,
-    .year_length = 1,
 };
 
 test "icosphere has the expected counts" {
@@ -601,9 +569,7 @@ test "same seed and parameters produce the same planet" {
 }
 
 test "sun reaches the tropic at the solstice" {
-    const planet = try Planet.create(std.testing.allocator, earth);
-    defer planet.destroy();
-    const s = planet.sunDirection(earth_year / 4);
+    const s = sunFromOrbit(23.44, 1, 1, earth_year / 4);
     try std.testing.expectApproxEqAbs(@sin(std.math.degreesToRadians(23.44)), s[1], 1e-9);
 }
 

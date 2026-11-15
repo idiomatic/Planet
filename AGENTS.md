@@ -21,7 +21,7 @@ Procedurally generated Earth-like planet viewer for macOS. Planned features: [DE
 ## Layout
 
 * [core/src/root.zig](core/src/root.zig): generation, simulation, C ABI, and tests
-* [core/include/planet.h](core/include/planet.h): the C ABI, imported by Swift as a bridging header
+* [core/include/planet.h](core/include/planet.h): the C ABI, imported by Swift as a bridging header; its planet parameters (`pl_params`) are exactly the generation parameters, and everything live stays in the app
 * [app/Sources/](app/Sources/): SwiftUI app, Metal renderer, and shaders (compiled at runtime)
 * [app/Info.plist](app/Info.plist): bundle metadata
 

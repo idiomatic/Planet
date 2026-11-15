@@ -4,14 +4,11 @@
 #include <stddef.h>
 #include <stdint.h>
 
+// Exactly the inputs that generate a planet; the view's parameters (radius, sea level, the
+// orbit, and so on) are the app's.
 typedef struct {
     uint64_t seed;
-    double radius_scale; // relative to Earth
     double region_scale; // >= 1, relative to Earth
-    double sea_level;    // 0...1 of the surface elevation range
-    double axial_tilt;   // degrees
-    double day_length;   // relative to Earth
-    double year_length;  // relative to Earth
 } pl_params;
 
 typedef struct pl_planet pl_planet;
@@ -28,8 +25,6 @@ const uint64_t *pl_planet_addresses(const pl_planet *planet);
 uint32_t pl_planet_index_count(const pl_planet *planet);
 const uint32_t *pl_planet_indices(const pl_planet *planet);
 
-double pl_planet_radius(const pl_planet *planet); // meters
-float pl_planet_sea_level(const pl_planet *planet); // meters
 float pl_planet_min_elevation(const pl_planet *planet);
 float pl_planet_max_elevation(const pl_planet *planet);
 
