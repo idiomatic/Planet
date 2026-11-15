@@ -72,8 +72,14 @@ final class PatchCache {
     private let seaLevel: Float
     private var patches: [PatchKey: Patch] = [:]
     private var pending: Set<PatchKey> = []
-    private let maxInFlight = max(ProcessInfo.processInfo.activeProcessorCount * 2, 4)
+    /// Patches this selection wanted but lacked, with their parent's triangle size on screen.
+    private var wanted: [(pixels: Float, key: PatchKey)] = []
+    /// Leaves two cores for the main thread and the window server.
+    private let maxInFlight = max(ProcessInfo.processInfo.activeProcessorCount - 2, 2)
     private var frame = 0
+
+    /// Called when a background patch arrives, so the view can draw it.
+    var onInstall: (() -> Void)?
 
     nonisolated private static let floatsPerVertex = 12
     private static let roots = (0..<20).map { PatchKey(level: 0, face: UInt32($0), path: 0) }
@@ -102,9 +108,15 @@ final class PatchCache {
         frame += 1
         generatedThisFrame = 0
         visited = 0
+        wanted.removeAll(keepingCapacity: true)
         var list: [Patch] = []
         for key in Self.roots { visit(key, view, &list) }
         drawn = list.count
+        // Generate the most visible missing patches first. Requests are rebuilt each frame,
+        // so a patch the camera has passed is never generated; only those in flight may be.
+        for (_, key) in wanted.sorted(by: { $0.pixels > $1.pixels }) where pending.count < maxInFlight {
+            request(key)
+        }
         evict()
         return list
     }
@@ -114,7 +126,7 @@ final class PatchCache {
         patch.lastUsed = frame
         visited += 1
         if culled(patch, view) { return }
-        if key.level < maxLevel, wantsRefinement(key, patch, view) {
+        if key.level < maxLevel, let pixels = refinementPixels(key, patch, view) {
             let children = key.children
             var missing = children.filter { patches[$0] == nil }
             if synchronous {
@@ -126,7 +138,7 @@ final class PatchCache {
                 }
                 missing = []
             } else {
-                missing.forEach(request)
+                for child in missing where !pending.contains(child) { wanted.append((pixels, child)) }
             }
             if missing.isEmpty {
                 for child in children { visit(child, view, &list) }
@@ -136,10 +148,11 @@ final class PatchCache {
         list.append(patch)
     }
 
-    /// Whether the patch's triangles would be larger than `targetPixels` on screen.
-    private func wantsRefinement(_ key: PatchKey, _ patch: Patch, _ view: PatchView) -> Bool {
+    /// The patch's triangle size on screen, in pixels, if it's above `targetPixels`.
+    private func refinementPixels(_ key: PatchKey, _ patch: Patch, _ view: PatchView) -> Float? {
         let distance = max(length(view.camera - patch.center) - patch.radius, 1e-7)
-        return Self.triangleEdge(key.level) / distance * view.pixelsPerRadian > targetPixels
+        let pixels = Self.triangleEdge(key.level) / distance * view.pixelsPerRadian
+        return pixels > targetPixels ? pixels : nil
     }
 
     private func culled(_ patch: Patch, _ view: PatchView) -> Bool {
@@ -161,7 +174,7 @@ final class PatchCache {
         guard !pending.contains(key), pending.count < maxInFlight else { return }
         pending.insert(key)
         let planet = planet
-        Task.detached(priority: .userInitiated) {
+        Task.detached(priority: .utility) {
             let vertices = Self.vertices(planet, key)
             await self.install(key, vertices)
         }
@@ -193,6 +206,7 @@ final class PatchCache {
         let parentEdge = key.level > 0 ? 2 * Self.triangleEdge(key.level) : 0
         patches[key] = Patch(
             buffer: buffer, center: center, radius: radius, skirtDepth: skirtDepth, parentEdge: parentEdge)
+        onInstall?()
     }
 
     private func evict() {

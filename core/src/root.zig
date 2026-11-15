@@ -271,19 +271,15 @@ pub fn generatePatch(p: Params, level: u5, face: u5, path: u64, out: []f32) void
 }
 
 fn writePatchVertex(p: Params, point: Vec, skirt: f32, out: []f32) void {
-    // Central differences along a tangent frame, with a step independent of the patch, so a
-    // vertex gets the same gradient from every patch that has it.
-    const h = 1e-5;
-    const t1 = normalize(cross(if (@abs(point[1]) < 0.9) Vec{ 0, 1, 0 } else Vec{ 1, 0, 0 }, point));
-    const t2 = cross(point, t1);
-    const d1 = (elevation(p, axpy(h, t1, point)) - elevation(p, axpy(-h, t1, point))) / (2 * h);
-    const d2 = (elevation(p, axpy(h, t2, point)) - elevation(p, axpy(-h, t2, point))) / (2 * h);
-    const e = elevation(p, point);
+    // The exact gradient, a function of the point alone, so a vertex shades alike in every
+    // patch that has it; only its tangential part matters on the sphere.
+    const e = elevationWithGradient(p, point);
+    const radial = e.gradient[0] * point[0] + e.gradient[1] * point[1] + e.gradient[2] * point[2];
     for (0..3) |k| {
         out[k] = @floatCast(point[k]);
-        out[4 + k] = @floatCast(d1 * t1[k] + d2 * t2[k]);
+        out[4 + k] = @floatCast(e.gradient[k] - radial * point[k]);
     }
-    out[3] = @floatCast(e);
+    out[3] = @floatCast(e.value);
     out[7] = skirt;
 }
 
@@ -345,63 +341,91 @@ fn cross(a: Vec, b: Vec) Vec {
     return .{ a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] };
 }
 
-fn axpy(s: f64, x: Vec, y: Vec) Vec {
-    return .{ s * x[0] + y[0], s * x[1] + y[1], s * x[2] + y[2] };
-}
-
 /// Octaves of the placeholder elevation: its finest wavelength (~1 km at Earth's radius) suits
 /// the finest patches. Fixed, so a point's elevation doesn't depend on which patch asks.
 const elevation_octaves = 13;
 
+/// A noise value and its gradient with respect to the sample point.
+const Sample = struct { value: f64, gradient: Vec };
+
 /// Placeholder for tectonics: warped fractal noise, in meters.
 fn elevation(p: Params, point: Vec) f64 {
+    return elevationWithGradient(p, point).value;
+}
+
+/// The elevation and its 3D gradient in meters per radius, by the chain rule through the warp:
+/// E(x) = A·m(q + w(q)), q = f·x, so ∇E = A·f·(I + J_w)ᵀ·∇m.
+fn elevationWithGradient(p: Params, point: Vec) Sample {
     const frequency = 1.2 / p.region_scale;
     const q: Vec = .{ point[0] * frequency, point[1] * frequency, point[2] * frequency };
-    const warp: Vec = .{
+    const warp = [3]Sample{
         fbm(p.seed +% 101, q, 4),
         fbm(p.seed +% 202, q, 4),
         fbm(p.seed +% 303, q, 4),
     };
-    const e = fbm(p.seed, .{ q[0] + warp[0], q[1] + warp[1], q[2] + warp[2] }, elevation_octaves);
-    return e * elevation_amplitude;
+    const main = fbm(p.seed, .{ q[0] + warp[0].value, q[1] + warp[1].value, q[2] + warp[2].value }, elevation_octaves);
+    var gradient: Vec = undefined;
+    for (0..3) |j| {
+        var g = main.gradient[j];
+        for (0..3) |k| g += main.gradient[k] * warp[k].gradient[j];
+        gradient[j] = g * elevation_amplitude * frequency;
+    }
+    return .{ .value = main.value * elevation_amplitude, .gradient = gradient };
 }
 
-fn fbm(seed: u64, p: Vec, octaves: u32) f64 {
+fn fbm(seed: u64, p: Vec, octaves: u32) Sample {
     var sum: f64 = 0;
+    var gradient: Vec = .{ 0, 0, 0 };
     var norm: f64 = 0;
     var amplitude: f64 = 1;
     var frequency: f64 = 1;
     for (0..octaves) |octave| {
         const s = seed +% @as(u64, octave) *% 0x9E3779B97F4A7C15;
-        sum += amplitude * valueNoise(s, .{ p[0] * frequency, p[1] * frequency, p[2] * frequency });
+        const n = valueNoise(s, .{ p[0] * frequency, p[1] * frequency, p[2] * frequency });
+        sum += amplitude * n.value;
+        for (0..3) |k| gradient[k] += amplitude * frequency * n.gradient[k];
         norm += amplitude;
         amplitude *= 0.5;
         frequency *= 2.03;
     }
-    return sum / norm;
+    return .{ .value = sum / norm, .gradient = .{ gradient[0] / norm, gradient[1] / norm, gradient[2] / norm } };
 }
 
-fn valueNoise(seed: u64, p: Vec) f64 {
+fn valueNoise(seed: u64, p: Vec) Sample {
     const f: Vec = .{ @floor(p[0]), @floor(p[1]), @floor(p[2]) };
     const cell = [3]i64{ @intFromFloat(f[0]), @intFromFloat(f[1]), @intFromFloat(f[2]) };
-    const t: Vec = .{ fade(p[0] - f[0]), fade(p[1] - f[1]), fade(p[2] - f[2]) };
-    var corners: [8]f64 = undefined;
-    for (&corners, 0..) |*corner, i| {
+    const r: Vec = .{ p[0] - f[0], p[1] - f[1], p[2] - f[2] };
+    const t: Vec = .{ fade(r[0]), fade(r[1]), fade(r[2]) };
+    var c: [8]f64 = undefined;
+    for (&c, 0..) |*corner, i| {
         corner.* = lattice(seed, .{
             cell[0] + @as(i64, @intCast(i & 1)),
             cell[1] + @as(i64, @intCast((i >> 1) & 1)),
             cell[2] + @as(i64, @intCast((i >> 2) & 1)),
         });
     }
-    const x0 = lerp(corners[0], corners[1], t[0]);
-    const x1 = lerp(corners[2], corners[3], t[0]);
-    const x2 = lerp(corners[4], corners[5], t[0]);
-    const x3 = lerp(corners[6], corners[7], t[0]);
-    return lerp(lerp(x0, x1, t[1]), lerp(x2, x3, t[1]), t[2]);
+    const x0 = lerp(c[0], c[1], t[0]);
+    const x1 = lerp(c[2], c[3], t[0]);
+    const x2 = lerp(c[4], c[5], t[0]);
+    const x3 = lerp(c[6], c[7], t[0]);
+    const y0 = lerp(x0, x1, t[1]);
+    const y1 = lerp(x2, x3, t[1]);
+    // Derivatives of the same trilinear blend, through the fade curve.
+    const dx = lerp(lerp(c[1] - c[0], c[3] - c[2], t[1]), lerp(c[5] - c[4], c[7] - c[6], t[1]), t[2]);
+    const dy = lerp(x1 - x0, x3 - x2, t[2]);
+    const dz = y1 - y0;
+    return .{
+        .value = lerp(y0, y1, t[2]),
+        .gradient = .{ dx * fadeSlope(r[0]), dy * fadeSlope(r[1]), dz * fadeSlope(r[2]) },
+    };
 }
 
 fn fade(t: f64) f64 {
     return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+fn fadeSlope(t: f64) f64 {
+    return 30 * t * t * (t * (t - 2) + 1);
 }
 
 fn lerp(a: f64, b: f64, t: f64) f64 {
@@ -639,6 +663,24 @@ test "a child's parent values match the parent wherever they share a point" {
         }
         // The child's even lattice points: (n/2 + 1)(n/2 + 2)/2 of them.
         try std.testing.expectEqual(@as(usize, (patch_n / 2 + 1) * (patch_n / 2 + 2) / 2), shared);
+    }
+}
+
+test "the exact elevation gradient matches finite differences" {
+    var prng = std.Random.DefaultPrng.init(7);
+    const random = prng.random();
+    for (0..200) |_| {
+        const point = normalize(.{ random.float(f64) - 0.5, random.float(f64) - 0.5, random.float(f64) - 0.5 });
+        const exact = elevationWithGradient(earth, point).gradient;
+        const h = 1e-7;
+        for (0..3) |k| {
+            var plus = point;
+            var minus = point;
+            plus[k] += h;
+            minus[k] -= h;
+            const numeric = (elevation(earth, plus) - elevation(earth, minus)) / (2 * h);
+            try std.testing.expectApproxEqAbs(numeric, exact[k], 1e-4 * (@abs(numeric) + 1e4));
+        }
     }
 }
 

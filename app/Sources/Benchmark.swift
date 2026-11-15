@@ -34,6 +34,7 @@ enum Benchmark {
             """)
         for name in ["cold", "warm"] {
             let generated = renderer.patches.generationSeconds
+            let cpuStart = cpuSeconds()
             var wall = [Double]()
             var gpu = [Double]()
             var drawn = 0
@@ -59,10 +60,12 @@ enum Benchmark {
                 visited += renderer.patches.visited
                 if renderer.patches.generatedThisFrame == 0 { cachedOnly.append(wall.last!) }
             }
+            let cpu = cpuSeconds() - cpuStart
             let sorted = wall.sorted()
             let mean = wall.reduce(0, +) / Double(wall.count)
             print("""
                 \(name) pass
+                  CPU time          \(ms(cpu)) (\(ms(cpu / Double(frames))) per frame)
                   frame (CPU+GPU)   mean \(ms(mean)), p50 \(ms(sorted[wall.count / 2])), \
                 p99 \(ms(sorted[min(wall.count - 1, wall.count * 99 / 100)]))
                   frame (GPU)       mean \(ms(gpu.reduce(0, +) / Double(gpu.count)))
@@ -86,6 +89,14 @@ enum Benchmark {
     }
 
     private static func ms(_ s: Double) -> String { String(format: "%.3f ms", s * 1000) }
+
+    /// User and system CPU time of this process, across all threads.
+    private static func cpuSeconds() -> Double {
+        var usage = rusage()
+        getrusage(RUSAGE_SELF, &usage)
+        func seconds(_ t: timeval) -> Double { Double(t.tv_sec) + Double(t.tv_usec) / 1e6 }
+        return seconds(usage.ru_utime) + seconds(usage.ru_stime)
+    }
     private static func mb(_ b: UInt64) -> String { String(format: "%.1f MB", Double(b) / 1_048_576) }
 
     private static func fail() -> Never {

@@ -1,12 +1,31 @@
 import MetalKit
+import Observation
 import simd
 
+/// The status line's text, observed by SwiftUI.
+@MainActor
+@Observable
+final class StatusLine {
+    var text = ""
+}
+
 /// Draws a planet and flies a camera around it. Distances are in planet radii.
+///
+/// Draws only when something changes: continuously while flying (up to 120 fps) or while time
+/// runs (30 fps, since only the sun moves), and otherwise once per change (a drag, a scroll, a
+/// toggle, a resize, or a newly generated patch).
 @MainActor
 final class Renderer: NSObject, MTKViewDelegate {
     let device: MTLDevice
     let planet: Planet
+    let statusLine = StatusLine()
     var boost = false
+
+    /// The view drawing this renderer, whose draw loop it starts and stops.
+    weak var view: MTKView? {
+        didSet { updateDrawLoop() }
+    }
+    private var lastStatusUpdate: CFTimeInterval = 0
 
     private let queue: MTLCommandQueue
     private let pipeline: MTLRenderPipelineState
@@ -24,14 +43,21 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var lastFrame: CFTimeInterval?
     private var simulatedSeconds = 0.0
     /// Whether to draw the mesh's edges over the surface.
-    var showMesh = false
+    var showMesh = false {
+        didSet { setNeedsRedraw() }
+    }
     /// Whether patches blend toward their parent's shape as they near the split, so levels
     /// change without popping.
-    var blendLevels = true
+    var blendLevels = true {
+        didSet { setNeedsRedraw() }
+    }
 
     /// Percent; 100 is real time and 0 is paused.
     var timeSpeed = 360_000.0 {
-        didSet { timeSpeed = min(max(timeSpeed, 0), 1e9) }
+        didSet {
+            timeSpeed = min(max(timeSpeed, 0), 1e9)
+            updateDrawLoop()
+        }
     }
 
     /// Altitude, in radii, below which flight and zoom stop slowing (~3 km at Earth's radius),
@@ -77,6 +103,27 @@ final class Renderer: NSObject, MTKViewDelegate {
         self.scale = scale
         // Above the highest point, with a margin for detail finer than the coarse mesh.
         self.floorRadius = 1 + scale * (max(planet.maxElevation, planet.seaLevel) + 500) + 1e-5
+        super.init()
+        patches.onInstall = { [weak self] in self?.setNeedsRedraw() }
+    }
+
+    // MARK: Draw loop
+
+    /// Draws continuously while flying or while time runs; otherwise only on request.
+    private func updateDrawLoop() {
+        guard let view else { return }
+        let animating = !keys.isEmpty || timeSpeed > 0
+        if animating, view.isPaused { lastFrame = nil }
+        view.preferredFramesPerSecond = keys.isEmpty ? 30 : 120
+        view.enableSetNeedsDisplay = !animating
+        view.isPaused = !animating
+        if !animating { setNeedsRedraw() }
+    }
+
+    /// Draws once more, if the view isn't already drawing continuously.
+    private func setNeedsRedraw() {
+        guard let view, view.isPaused else { return }
+        view.needsDisplay = true
     }
 
     // MARK: Input
@@ -85,7 +132,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     func keyDown(_ key: String, repeated: Bool) -> Bool {
         switch key {
         case "w", "a", "s", "d", "r", "f", "q", "e":
-            keys.insert(key)
+            if keys.insert(key).inserted { updateDrawLoop() }
         case "m":
             if !repeated { showMesh.toggle() }
         case "b":
@@ -101,13 +148,14 @@ final class Renderer: NSObject, MTKViewDelegate {
     }
 
     func keyUp(_ key: String) {
-        keys.remove(key)
+        if keys.remove(key) != nil { updateDrawLoop() }
     }
 
     func look(dx: Float, dy: Float) {
         let yaw = simd_quatf(angle: -dx * 0.003, axis: SIMD3(0, 1, 0))
         let pitch = simd_quatf(angle: -dy * 0.003, axis: SIMD3(1, 0, 0))
         orientation = (orientation * yaw * pitch).normalized
+        setNeedsRedraw()
     }
 
     /// Moves along the view direction by a fraction of the altitude: positive `amount` moves in.
@@ -116,6 +164,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         let step = altitude * (1 - exp(-amount))
         position += orientation.act(SIMD3(0, 0, -1)) * step
         if length(position) < floorRadius { position = normalize(position) * floorRadius }
+        setNeedsRedraw()
     }
 
     // MARK: Status
@@ -143,6 +192,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             aspect = Float(size.width / size.height)
             viewportHeight = Float(size.height)
         }
+        setNeedsRedraw()
     }
 
     func draw(in view: MTKView) {
@@ -159,6 +209,13 @@ final class Renderer: NSObject, MTKViewDelegate {
         encode(commands, pass)
         commands.present(drawable)
         commands.commit()
+
+        // At most 4 updates a second while drawing continuously, and always when stopped.
+        if view.isPaused || now - lastStatusUpdate >= 0.25 {
+            lastStatusUpdate = now
+            let text = status
+            if statusLine.text != text { statusLine.text = text }
+        }
     }
 
     /// Puts the camera at `position` looking at `target`, with the planet's radial direction up
@@ -172,6 +229,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         let right = normalize(cross(forward, abs(dot(forward, reference)) > 0.99 ? SIMD3(1, 0, 0) : reference))
         orientation = simd_quatf(simd_float3x3(right, cross(right, forward), -forward))
         simulatedSeconds = camera.seconds
+        setNeedsRedraw()
     }
 
     /// Renders one frame offscreen from the current camera.

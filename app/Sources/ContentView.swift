@@ -11,12 +11,10 @@ struct ContentView: View {
             Color.black
             if let renderer {
                 PlanetView(renderer: renderer, focused: !showingPanel)
-                TimelineView(.periodic(from: .now, by: 0.25)) { _ in
-                    Text(renderer.status)
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.white.opacity(0.8))
-                        .padding(8)
-                }
+                Text(renderer.statusLine.text)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.white.opacity(0.8))
+                    .padding(8)
             }
             if showingPanel {
                 Color.black.opacity(0.4)
@@ -74,6 +72,7 @@ struct PlanetView: NSViewRepresentable {
     func updateNSView(_ view: FlightView, context: Context) {
         view.renderer = renderer
         view.delegate = renderer
+        renderer.view = view
         renderer.mtkView(view, drawableSizeWillChange: view.drawableSize)
         view.flightFocus = focused
     }
