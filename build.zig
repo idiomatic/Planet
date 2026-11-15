@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const app_name = "Uncanny Planet";
+const app_name = "Planet";
 const swift_sources = [_][]const u8{
     "app/Sources/App.swift",
     "app/Sources/Benchmark.swift",
@@ -35,14 +35,14 @@ pub fn build(b: *std.Build) void {
     });
     core.addOptions("build_options", options);
 
-    const lib = b.addLibrary(.{ .name = "uncanny", .linkage = .static, .root_module = core });
+    const lib = b.addLibrary(.{ .name = "planet", .linkage = .static, .root_module = core });
     lib.bundle_compiler_rt = true;
 
     const swiftc = b.addSystemCommand(&.{ "xcrun", "swiftc", "-wmo", "-parse-as-library" });
     swiftc.addArgs(&.{ "-target", "arm64-apple-macos15.0", "-swift-version", "6" });
     swiftc.addArgs(if (optimize == .debug) &.{ "-Onone", "-g" } else &.{"-O"});
     swiftc.addArg("-import-objc-header");
-    swiftc.addFileArg(b.path("core/include/uncanny.h"));
+    swiftc.addFileArg(b.path("core/include/planet.h"));
     for (swift_sources) |source| swiftc.addFileArg(b.path(source));
     swiftc.addArtifactArg(lib);
     swiftc.addArg("-o");

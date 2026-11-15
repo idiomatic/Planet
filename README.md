@@ -1,4 +1,4 @@
-# Uncanny Planet
+# Planet
 
 A procedurally generated Earth-like planet viewer for macOS. [AGENTS.md](AGENTS.md) is the specification; [DEVELOPMENT.md](DEVELOPMENT.md) lists planned work.
 
@@ -18,7 +18,7 @@ Enter a seed (any text, such as `perihelion`) on the panel and choose Generate. 
 Command-line switches skip the panel and open straight to a planet; `--help` lists them:
 
 ```sh
-"zig-out/Uncanny Planet.app/Contents/MacOS/Uncanny Planet" --help
+"zig-out/Planet.app/Contents/MacOS/Planet" --help
 ```
 
 For example, to start beside the highest peak with 30× relief and time paused:
@@ -33,14 +33,14 @@ Every switch takes a value. AppKit reads arguments in `-key value` pairs and ope
 To render a still without opening a window, as for the image above:
 
 ```sh
-"zig-out/Uncanny Planet.app/Contents/MacOS/Uncanny Planet" \
+"zig-out/Planet.app/Contents/MacOS/Planet" \
   --snapshot docs/perihelion.png --seed perihelion --direction 1,0.3,1
 ```
 
 To render a looping flight video (2 minutes at 1080p60 takes about a minute on an M2):
 
 ```sh
-"zig-out/Uncanny Planet.app/Contents/MacOS/Uncanny Planet" \
+"zig-out/Planet.app/Contents/MacOS/Planet" \
   --seed perihelion --exaggeration 5000 --video demo.mp4
 ```
 
@@ -96,7 +96,7 @@ Before patches, the renderer drew the whole coarse mesh at once, which grew 4× 
 
 ## How it was made
 
-Uncanny Planet was written with [Claude](https://claude.com).
+Planet was written with [Claude](https://claude.com).
 
 ## License
 

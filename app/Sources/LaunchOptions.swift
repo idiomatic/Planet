@@ -11,7 +11,7 @@ struct Camera {
 /// `-key value`, and a leftover bare argument is opened as a file, which suppresses the window.
 struct LaunchOptions {
     static let usage = """
-        Usage: Uncanny Planet [--switch value ...]
+        Usage: Planet [--switch value ...]
 
         Any switch skips the parameter panel and opens straight to a planet.
         Every switch takes a value.

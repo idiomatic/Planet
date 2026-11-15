@@ -85,17 +85,17 @@ final class PatchCache {
     private static let roots = (0..<20).map { PatchKey(level: 0, face: UInt32($0), path: 0) }
 
     init?(planet: Planet, device: MTLDevice, scale: Float) {
-        let indexCount = Int(up_patch_index_count())
+        let indexCount = Int(pl_patch_index_count())
         var indices = [UInt32](repeating: 0, count: indexCount)
-        up_patch_indices(&indices)
+        pl_patch_indices(&indices)
         guard let indexBuffer = device.makeBuffer(
             bytes: indices, length: indexCount * MemoryLayout<UInt32>.stride, options: .storageModeShared)
         else { return nil }
         self.indexBuffer = indexBuffer
         self.indexCount = indexCount
-        self.surfaceIndexCount = Int(up_patch_surface_index_count())
-        self.vertexCount = Int(up_patch_vertex_count())
-        self.maxLevel = up_patch_max_level()
+        self.surfaceIndexCount = Int(pl_patch_surface_index_count())
+        self.vertexCount = Int(pl_patch_vertex_count())
+        self.maxLevel = pl_patch_max_level()
         self.planet = planet
         self.device = device
         self.scale = scale
@@ -223,7 +223,7 @@ final class PatchCache {
     }
 
     nonisolated private static func vertices(_ planet: Planet, _ key: PatchKey) -> [Float] {
-        var vertices = [Float](repeating: 0, count: Int(up_patch_vertex_count()) * floatsPerVertex)
+        var vertices = [Float](repeating: 0, count: Int(pl_patch_vertex_count()) * floatsPerVertex)
         planet.generatePatch(key, into: &vertices)
         return vertices
     }

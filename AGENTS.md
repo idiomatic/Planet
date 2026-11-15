@@ -1,4 +1,4 @@
-# Uncanny Planet
+# Planet
 
 Procedurally generated Earth-like planet viewer for macOS. Planned features: [DEVELOPMENT.md](DEVELOPMENT.md).
 
@@ -10,7 +10,7 @@ Procedurally generated Earth-like planet viewer for macOS. Planned features: [DE
 
 ## Build
 
-* `zig build` builds the core, compiles the app with `swiftc -wmo`, and installs `zig-out/Uncanny Planet.app`; no Xcode project
+* `zig build` builds the core, compiles the app with `swiftc -wmo`, and installs `zig-out/Planet.app`; no Xcode project
 * `zig build run` runs the app; `zig build test` runs the core tests
 * `-Dcoarse-level=N` sets the coarse level (default 6)
 
@@ -21,7 +21,7 @@ Procedurally generated Earth-like planet viewer for macOS. Planned features: [DE
 ## Layout
 
 * [core/src/root.zig](core/src/root.zig): generation, simulation, C ABI, and tests
-* [core/include/uncanny.h](core/include/uncanny.h): the C ABI, imported by Swift as a bridging header
+* [core/include/planet.h](core/include/planet.h): the C ABI, imported by Swift as a bridging header
 * [app/Sources/](app/Sources/): SwiftUI app, Metal renderer, and shaders (compiled at runtime)
 * [app/Info.plist](app/Info.plist): bundle metadata
 
@@ -60,7 +60,7 @@ Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usa
 ## Patches (view-dependent rendering)
 
 * the renderer draws patches, not the coarse mesh: a patch is an icosphere triangle named by level (0–8), base face, and path, drawn as 4 more levels (a 256-triangle lattice), so the finest reach level 12 (~1.6 km)
-* the core generates a patch as a pure, thread-safe function of the planet's parameters and its name (`up_patch_generate`), with the coarse mesh's midpoint normalizations, so shared vertices agree bit for bit; each vertex carries direction, elevation, tangential elevation gradient (exact, by the chain rule through the noise and warp, so a vertex shades alike in every patch), a skirt flag, and the elevation and gradient the parent patch shows there (its own at points the parent shares; the average of the parent edge's ends at edge midpoints)
+* the core generates a patch as a pure, thread-safe function of the planet's parameters and its name (`pl_patch_generate`), with the coarse mesh's midpoint normalizations, so shared vertices agree bit for bit; each vertex carries direction, elevation, tangential elevation gradient (exact, by the chain rule through the noise and warp, so a vertex shades alike in every patch), a skirt flag, and the elevation and gradient the parent patch shows there (its own at points the parent shares; the average of the parent edge's ends at edge midpoints)
 * each frame, selection starts at the 20 base faces, culls patches outside the frustum or behind the horizon, and refines a patch into its 4 children while its triangles would exceed 12 pixels
 * patches are cached between frames (least recently used beyond 4,096 are evicted); missing ones are generated on background threads (utility priority, at most cores − 2 at once, the largest on screen first; wanted patches are recomputed each frame, so passed-by ones are never started) while their parent is drawn; snapshots and benchmarks generate synchronously
 * LOD blending (geomorphing): the vertex shader blends each vertex from the parent's values to its own as the parent's triangles grow on screen from the split threshold to 1.5× it, so a patch matches its parent when it appears and is fully its own across the whole patch before it splits (ending at 2× pops, since a patch's far side lies ~15% farther than its near side); B or `--lod-blend on|off` toggles it (default on)

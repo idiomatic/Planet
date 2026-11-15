@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct UncannyPlanetApp: App {
+struct PlanetApp: App {
     init() {
         LaunchOptions.handleHelp()
         Benchmark.runIfRequested()
@@ -10,7 +10,7 @@ struct UncannyPlanetApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("Uncanny Planet") {
+        WindowGroup("Planet") {
             ContentView()
         }
     }

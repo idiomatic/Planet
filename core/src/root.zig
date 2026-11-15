@@ -464,87 +464,87 @@ fn planetOf(handle: *const Handle) *const Planet {
     return @ptrCast(@alignCast(handle));
 }
 
-export fn up_seed_from_string(text: [*]const u8, length: usize) u64 {
+export fn pl_seed_from_string(text: [*]const u8, length: usize) u64 {
     return seedFromString(text[0..length]);
 }
 
-export fn up_planet_create(params: *const Params) ?*Handle {
+export fn pl_planet_create(params: *const Params) ?*Handle {
     const planet = Planet.create(std.heap.page_allocator, params.*) catch return null;
     return @ptrCast(planet);
 }
 
-export fn up_planet_destroy(handle: ?*Handle) void {
+export fn pl_planet_destroy(handle: ?*Handle) void {
     const planet: *Planet = @ptrCast(@alignCast(handle orelse return));
     planet.destroy();
 }
 
-export fn up_planet_vertex_count(handle: *const Handle) u32 {
+export fn pl_planet_vertex_count(handle: *const Handle) u32 {
     return @intCast(planetOf(handle).elevations.len);
 }
 
-export fn up_planet_positions(handle: *const Handle) [*]const f32 {
+export fn pl_planet_positions(handle: *const Handle) [*]const f32 {
     return planetOf(handle).positions.ptr;
 }
 
-export fn up_planet_elevations(handle: *const Handle) [*]const f32 {
+export fn pl_planet_elevations(handle: *const Handle) [*]const f32 {
     return planetOf(handle).elevations.ptr;
 }
 
-export fn up_planet_addresses(handle: *const Handle) [*]const u64 {
+export fn pl_planet_addresses(handle: *const Handle) [*]const u64 {
     return planetOf(handle).addresses.ptr;
 }
 
-export fn up_planet_index_count(handle: *const Handle) u32 {
+export fn pl_planet_index_count(handle: *const Handle) u32 {
     return @intCast(planetOf(handle).indices.len);
 }
 
-export fn up_planet_indices(handle: *const Handle) [*]const u32 {
+export fn pl_planet_indices(handle: *const Handle) [*]const u32 {
     return planetOf(handle).indices.ptr;
 }
 
-export fn up_planet_radius(handle: *const Handle) f64 {
+export fn pl_planet_radius(handle: *const Handle) f64 {
     return planetOf(handle).radius();
 }
 
-export fn up_planet_sea_level(handle: *const Handle) f32 {
+export fn pl_planet_sea_level(handle: *const Handle) f32 {
     return planetOf(handle).sea_level;
 }
 
-export fn up_planet_min_elevation(handle: *const Handle) f32 {
+export fn pl_planet_min_elevation(handle: *const Handle) f32 {
     return planetOf(handle).min_elevation;
 }
 
-export fn up_planet_max_elevation(handle: *const Handle) f32 {
+export fn pl_planet_max_elevation(handle: *const Handle) f32 {
     return planetOf(handle).max_elevation;
 }
 
-export fn up_patch_max_level() u32 {
+export fn pl_patch_max_level() u32 {
     return max_patch_level;
 }
 
-export fn up_patch_vertex_count() u32 {
+export fn pl_patch_vertex_count() u32 {
     return patch_vertices;
 }
 
-export fn up_patch_surface_index_count() u32 {
+export fn pl_patch_surface_index_count() u32 {
     return patch_surface_indices;
 }
 
-export fn up_patch_index_count() u32 {
+export fn pl_patch_index_count() u32 {
     return patch_indices;
 }
 
-export fn up_patch_indices(out: [*]u32) void {
+export fn pl_patch_indices(out: [*]u32) void {
     patchIndexPattern(out[0..patch_indices]);
 }
 
 /// Thread-safe: reads only the planet's immutable parameters.
-export fn up_patch_generate(handle: *const Handle, level: u32, face: u32, path: u64, out: [*]f32) void {
+export fn pl_patch_generate(handle: *const Handle, level: u32, face: u32, path: u64, out: [*]f32) void {
     const planet = planetOf(handle);
     generatePatch(planet.params, @intCast(level), @intCast(face), path, out[0 .. patch_vertices * patch_vertex_floats]);
 }
 
-export fn up_planet_sun_direction(handle: *const Handle, seconds: f64, out: *[3]f32) void {
+export fn pl_planet_sun_direction(handle: *const Handle, seconds: f64, out: *[3]f32) void {
     const s = planetOf(handle).sunDirection(seconds);
     for (0..3) |k| out[k] = @floatCast(s[k]);
 }

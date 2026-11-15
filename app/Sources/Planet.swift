@@ -21,12 +21,12 @@ struct PlanetParameters: Equatable {
     var seedValue: UInt64 {
         let bytes = Array(seed.utf8)
         return bytes.withUnsafeBufferPointer { buffer in
-            buffer.withMemoryRebound(to: CChar.self) { up_seed_from_string($0.baseAddress, $0.count) }
+            buffer.withMemoryRebound(to: CChar.self) { pl_seed_from_string($0.baseAddress, $0.count) }
         }
     }
 
-    var core: up_params {
-        up_params(
+    var core: pl_params {
+        pl_params(
             seed: seedValue,
             radius_scale: radiusScale / 100,
             region_scale: regionScale,
@@ -46,39 +46,39 @@ final class Planet: @unchecked Sendable {
 
     init?(_ parameters: PlanetParameters) {
         var params = parameters.core
-        guard let handle = up_planet_create(&params) else { return nil }
+        guard let handle = pl_planet_create(&params) else { return nil }
         self.parameters = parameters
         self.handle = handle
     }
 
     deinit {
-        up_planet_destroy(handle)
+        pl_planet_destroy(handle)
     }
 
-    var vertexCount: Int { Int(up_planet_vertex_count(handle)) }
+    var vertexCount: Int { Int(pl_planet_vertex_count(handle)) }
     var positions: UnsafeBufferPointer<Float> {
-        UnsafeBufferPointer(start: up_planet_positions(handle), count: vertexCount * 3)
+        UnsafeBufferPointer(start: pl_planet_positions(handle), count: vertexCount * 3)
     }
     var elevations: UnsafeBufferPointer<Float> {
-        UnsafeBufferPointer(start: up_planet_elevations(handle), count: vertexCount)
+        UnsafeBufferPointer(start: pl_planet_elevations(handle), count: vertexCount)
     }
     var indices: UnsafeBufferPointer<UInt32> {
-        UnsafeBufferPointer(start: up_planet_indices(handle), count: Int(up_planet_index_count(handle)))
+        UnsafeBufferPointer(start: pl_planet_indices(handle), count: Int(pl_planet_index_count(handle)))
     }
-    var radius: Double { up_planet_radius(handle) }
-    var seaLevel: Float { up_planet_sea_level(handle) }
-    var minElevation: Float { up_planet_min_elevation(handle) }
-    var maxElevation: Float { up_planet_max_elevation(handle) }
+    var radius: Double { pl_planet_radius(handle) }
+    var seaLevel: Float { pl_planet_sea_level(handle) }
+    var minElevation: Float { pl_planet_min_elevation(handle) }
+    var maxElevation: Float { pl_planet_max_elevation(handle) }
 
-    /// Writes the patch's vertices; `out` holds up_patch_vertex_count() × 12 floats.
+    /// Writes the patch's vertices; `out` holds pl_patch_vertex_count() × 12 floats.
     func generatePatch(_ key: PatchKey, into out: inout [Float]) {
-        up_patch_generate(handle, key.level, key.face, key.path, &out)
+        pl_patch_generate(handle, key.level, key.face, key.path, &out)
     }
 
     func sunDirection(at seconds: Double) -> SIMD3<Float> {
         var out: (Float, Float, Float) = (0, 0, 0)
         withUnsafeMutablePointer(to: &out) {
-            $0.withMemoryRebound(to: Float.self, capacity: 3) { up_planet_sun_direction(handle, seconds, $0) }
+            $0.withMemoryRebound(to: Float.self, capacity: 3) { pl_planet_sun_direction(handle, seconds, $0) }
         }
         return SIMD3(out.0, out.1, out.2)
     }
