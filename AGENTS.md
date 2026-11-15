@@ -14,6 +14,13 @@ Procedurally generated Earth-like planet viewer for macOS. Planned features: [DE
 * `zig build run` runs the app; `zig build test` runs the core tests
 * `-Dcoarse-level=N` sets the coarse level (default 6)
 
+## Releases
+
+* the version is `CFBundleShortVersionString` in [app/Info.plist](app/Info.plist) (0.1.0)
+* CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the core tests and a release build on every push to main and pull request, on Apple silicon
+* pushing a tag `vX.Y.Z` runs [.github/workflows/release.yml](.github/workflows/release.yml): it fails unless the tag matches the version and [CHANGELOG.md](CHANGELOG.md) has a section for it; it tests, builds a release, signs the bundle ad hoc (the linker signs only the executable, leaving Info.plist unsealed), zips it as `Planet-X.Y.Z-macos-arm64.zip`, and publishes a GitHub release with that section as its notes
+* not notarized, so downloaded copies are quarantined (the README explains opening them)
+
 ## Testing
 
 * interactive tests run in a macOS VM with 4 GB of memory

@@ -1,0 +1,55 @@
+name: Release
+
+# Pushing a tag vX.Y.Z publishes a release: the tag must match the app's version
+# (CFBundleShortVersionString in app/Info.plist), and CHANGELOG.md's section for that
+# version becomes the release notes.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+      - uses: mlugg/setup-zig@v2
+        with:
+          version: 0.17.1
+      - name: Check the version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          plist=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" app/Info.plist)
+          if [ "$version" != "$plist" ]; then
+            echo "::error::tag $GITHUB_REF_NAME doesn't match app/Info.plist's version $plist"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      - name: Extract the release notes
+        run: |
+          awk -v v="$VERSION" '
+            /^## / { if (found) exit; if (index($0, "[" v "]") || $2 == v) { found = 1; next } }
+            found
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::CHANGELOG.md has no section for $VERSION"
+            exit 1
+          fi
+      - name: Test the core
+        run: zig build test
+      - name: Build
+        run: zig build -Drelease
+      - name: Package
+        # The linker signs only the executable; signing the bundle ad hoc seals Info.plist too.
+        run: |
+          codesign --force --sign - zig-out/Planet.app
+          codesign --verify --strict zig-out/Planet.app
+          ditto -c -k --norsrc --noextattr --keepParent zig-out/Planet.app "Planet-$VERSION-macos-arm64.zip"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" "Planet-$VERSION-macos-arm64.zip" \
+            --title "Planet $VERSION" --notes-file notes.md --verify-tag

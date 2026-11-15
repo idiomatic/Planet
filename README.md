@@ -19,7 +19,7 @@ zig build test  # core tests
 
 ### Running a downloaded copy
 
-Planet isn't notarized: the linker signs it ad hoc, which is enough for a copy built on the same Mac. A copy downloaded from the internet (or received through AirDrop or Messages) is quarantined, so macOS refuses to open it, saying it can't be verified or is damaged. If you trust where it came from, either:
+Releases on GitHub include a zipped `Planet.app` for Apple silicon. Planet isn't notarized: it's signed ad hoc, which is enough for a copy built on the same Mac. A copy downloaded from the internet (or received through AirDrop or Messages) is quarantined, so macOS refuses to open it, saying it can't be verified or is damaged. If you trust where it came from, either:
 
 * remove the quarantine, then open it as usual:
 
