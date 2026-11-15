@@ -5,7 +5,7 @@ using namespace metal;
 struct Uniforms {
     float4x4 viewProjection;
     float4 sun;        // xyz: unit vector toward the sun
-    float4 elevation;  // x: min, y: sea level, z: max (meters)
+    float4 elevation;  // x: min, y: sea level, z: max (meters); w: 1 when drawing mesh edges
 };
 
 struct Vertex {
@@ -47,6 +47,7 @@ static float3 surfaceColor(float e, float4 range) {
 fragment float4 fragmentMain(Fragment in [[stage_in]], constant Uniforms &u [[buffer(1)]]) {
     float3 n = normalize(in.normal);
     float light = saturate(dot(n, u.sun.xyz));
+    if (u.elevation.w > 0.5) return float4(float3(0.75, 0.85, 1.0) * (0.25 + 0.5 * light), 1); // mesh edges
     return float4(surfaceColor(in.elevation, u.elevation) * (0.03 + light), 1);
 }
 """

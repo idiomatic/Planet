@@ -41,6 +41,7 @@ struct ContentView: View {
             guard let renderer else { return }
             renderer.place(options.camera(for: renderer.planet))
             if let speed = options.timeSpeed { renderer.timeSpeed = speed }
+            renderer.showMesh = options.showMesh
         }
     }
 

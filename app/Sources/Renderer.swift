@@ -22,6 +22,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var aspect: Float = 1
     private var lastFrame: CFTimeInterval?
     private var simulatedSeconds = 0.0
+    /// Whether to draw the mesh's edges over the surface.
+    var showMesh = false
+
     /// Percent; 100 is real time and 0 is paused.
     var timeSpeed = 360_000.0 {
         didSet { timeSpeed = min(max(timeSpeed, 0), 1e9) }
@@ -123,6 +126,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         switch key {
         case "w", "a", "s", "d", "r", "f", "q", "e":
             keys.insert(key)
+        case "m":
+            if !repeated { showMesh.toggle() }
         case ",":
             if !repeated { timeSpeed = timeSpeed > 1 ? max(timeSpeed / 10, 1) : 0 }
         case ".":
@@ -159,7 +164,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         return String(
             format: "seed %@ · time %@%% · day %.2f · altitude %.0f km\n"
                 + "drag: look · wheel: zoom · W/S: forward/back · A/D: left/right · R/F: up/down · "
-                + "Q/E: roll · shift: faster · ,/.: time slower/faster",
+                + "Q/E: roll · shift: faster · M: mesh · ,/.: time slower/faster",
             planet.parameters.seed,
             timeSpeed.formatted(.number.precision(.fractionLength(0))),
             days,
@@ -261,6 +266,21 @@ final class Renderer: NSObject, MTKViewDelegate {
         encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
         encoder.setVertexBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
+        drawTriangles(encoder)
+
+        if showMesh {
+            // Edges again as lines, pulled toward the camera (reverse-Z: greater is nearer).
+            uniforms.elevation.w = 1
+            encoder.setVertexBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
+            encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
+            encoder.setTriangleFillMode(.lines)
+            encoder.setDepthBias(0, slopeScale: 1, clamp: 0)
+            drawTriangles(encoder)
+        }
+        encoder.endEncoding()
+    }
+
+    private func drawTriangles(_ encoder: MTLRenderCommandEncoder) {
         encoder.drawIndexedPrimitives(
             type: .triangle,
             indexCount: indexCount,
@@ -268,7 +288,6 @@ final class Renderer: NSObject, MTKViewDelegate {
             indexBuffer: indexBuffer,
             indexBufferOffset: 0
         )
-        encoder.endEncoding()
     }
 
     /// Moves at a speed proportional to altitude, so approaching the surface slows down.

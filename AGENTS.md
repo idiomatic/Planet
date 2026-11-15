@@ -42,6 +42,7 @@ Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usa
 
 * simplified flight controls: drag to look; the scroll wheel or trackpad zooms along the view direction, by a fraction of the altitude; W/S, A/D, and R/F move; Q/E roll; Shift is faster; speed scales with altitude; the camera stays above the terrain
 * time speed (%, default 360,000%, i.e., an hour per second; 0 pauses): `,` and `.` divide and multiply it by 10, stepping between 1% and 0
+* M (or `--mesh on`) toggles drawing the mesh's edges over the surface
 * a status line shows seed, time speed, elapsed days, and altitude, with the controls
 * no save or export; the seed and parameters reproduce a planet
 * command-line switches set the parameters, initial camera, and controls (time speed), skip the panel, and generate at launch; every switch takes a value, since AppKit opens a bare argument as a file and then shows no window (defined in [app/Sources/LaunchOptions.swift](app/Sources/LaunchOptions.swift))

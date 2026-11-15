@@ -35,6 +35,7 @@ struct LaunchOptions {
 
         Controls:
           --time-speed <%>       100 is real time, 0 pauses (default 360000)
+          --mesh <on|off>        draw the mesh's edges (default off; M toggles)
 
         Snapshot:
           --snapshot <png>       render one frame to a PNG and exit, without a window
@@ -45,7 +46,7 @@ struct LaunchOptions {
 
     private static let switches: Set = [
         "--seed", "--radius", "--exaggeration", "--region-scale", "--sea-level", "--tilt", "--day",
-        "--year", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--snapshot",
+        "--year", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--mesh", "--snapshot",
         "--size",
     ]
 
@@ -64,6 +65,7 @@ struct LaunchOptions {
 
     var parameters = PlanetParameters()
     var timeSpeed: Double?
+    var showMesh = false
     var snapshot: String?
     var size = [1280, 800]
     private var peak = false
@@ -95,6 +97,7 @@ struct LaunchOptions {
         number("--year") { parameters.yearLength = $0 }
 
         timeSpeed = value("--time-speed").flatMap(Double.init)
+        showMesh = value("--mesh") == "on"
         snapshot = value("--snapshot")
         if let s = value("--size")?.split(separator: "x").compactMap({ Int($0) }), s.count == 2 { size = s }
         distance = value("--distance").flatMap(Float.init)
