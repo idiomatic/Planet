@@ -59,7 +59,6 @@ struct Sidebar: View {
                 Text("View").font(.headline)
                 VStack(alignment: .leading, spacing: 10) {
                     row("Relief (%)", $settings.values.exaggeration, .logarithmic(10...100_000), earth: ViewValues.earth.exaggeration)
-                    row("Radius (% of Earth)", $settings.values.radiusScale, .logarithmic(1...1000), earth: ViewValues.earth.radiusScale)
                     row("Sea level (% of elevation range)", $settings.values.seaLevel, .linear(0...100), earth: ViewValues.earth.seaLevel)
                     row("Air density (× Earth)", $settings.values.airDensity, .logarithmic(0.01...100), earth: ViewValues.earth.airDensity)
                     row("Axial tilt (°)", $settings.values.axialTilt, .linear(0...90), earth: ViewValues.earth.axialTilt)
@@ -68,6 +67,11 @@ struct Sidebar: View {
                     row("Detail (pixels; smaller is finer)", $settings.values.detail, .logarithmic(3...48), earth: ViewValues.earth.detail)
                     row("Exposure", $settings.values.exposure, .logarithmic(0.05...2), earth: ViewValues.earth.exposure)
                     row("Field of view (°)", $settings.values.fieldOfView, .linear(10...120), earth: ViewValues.earth.fieldOfView)
+                    // Relief is relative to the radius, so it changes only lengths in km (readouts);
+                    // shown for reference, set by --radius, until physics uses it.
+                    row("Radius (% of Earth)", $settings.values.radiusScale, .logarithmic(1...1000), earth: ViewValues.earth.radiusScale)
+                        .disabled(true)
+                        .help("Affects only lengths in kilometers for now; set with --radius")
                 }
             }
     }
