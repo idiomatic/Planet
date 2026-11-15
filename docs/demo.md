@@ -1,6 +1,6 @@
 # Demo video
 
-How [demo.mp4](demo.mp4) and its poster, [demo-poster.jpg](demo-poster.jpg), are made, so they can be re-recorded after the rendering changes. The current video predates the atmosphere.
+How [demo.mp4](demo.mp4) and its poster, [demo-poster.jpg](demo-poster.jpg), are made, so they can be re-recorded after the rendering changes.
 
 ## Direction
 
@@ -17,7 +17,7 @@ The path is `LoopingFlight` in [app/Sources/Video.swift](../app/Sources/Video.sw
 
 ## Recording
 
-Build a release, render a near-lossless master (about a minute on an M2, about 700 MB), then encode the copy for the repository in two passes:
+Build a release, render a near-lossless master (about 6 minutes on an M2, mostly raymarching the atmosphere at the 3840×2160 render size; about 740 MB), then encode the copy for the repository in two passes:
 
 ```sh
 zig build -Drelease
@@ -50,7 +50,7 @@ ffmpeg -y -i master.mp4 -vf "select='not(mod(n\,600))',scale=640:-1,tile=4x3" \
 ## Checks
 
 * **Size:** under 50 MB, GitHub's warning threshold (the current copy is 43 MB). Each re-recording adds its size to the repository's history, so re-record only when the look has changed meaningfully.
-* **Quality:** SSIM above 0.99 against the master (the current copy is 0.996, PSNR 50 dB):
+* **Quality:** SSIM above 0.99 against the master (the current copy is 0.994, PSNR 50.7 dB):
 
   ```sh
   ffmpeg -i docs/demo.mp4 -i master.mp4 -lavfi "[0:v][1:v]ssim;[0:v][1:v]psnr" -f null -

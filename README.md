@@ -4,7 +4,7 @@ A procedurally generated Earth-like planet viewer for macOS. [AGENTS.md](AGENTS.
 
 [![A two-minute looping flight over the planet "perihelion," with relief exaggerated 50×](docs/demo-poster.jpg)](docs/demo.mp4)
 
-[Watch the flight](docs/demo.mp4): two minutes, looping, over the planet "perihelion" with relief exaggerated 50× (1080p60, 43 MB).
+[Watch the flight](docs/demo.mp4): two minutes, looping, over the planet "perihelion" with relief exaggerated 50×, through the atmosphere (1080p60, 43 MB).
 
 ![The planet "perihelion" from orbit](docs/perihelion.png)
 
@@ -55,14 +55,14 @@ To render a still without opening a window, as for the image above:
   --snapshot docs/perihelion.png --seed perihelion --direction 1,0.3,1
 ```
 
-To render a looping flight video (2 minutes at 1080p60 takes about a minute on an M2):
+To render a looping flight video (2 minutes at 1080p60 takes about 6 minutes on an M2, mostly the atmosphere):
 
 ```sh
 "zig-out/Planet.app/Contents/MacOS/Planet" \
   --seed perihelion --exaggeration 5000 --video demo.mp4
 ```
 
-The demo above was rendered at 50 Mbps, then re-encoded with x264 to fit the repository (SSIM 0.996 and PSNR 50 dB against the master). [docs/demo.md](docs/demo.md) has the full directions for re-recording it: the flight's design, the poster frame, and the checks.
+The demo above was rendered at 50 Mbps, then re-encoded with x264 to fit the repository (SSIM 0.994 and PSNR 50.7 dB against the master). [docs/demo.md](docs/demo.md) has the full directions for re-recording it: the flight's design, the poster frame, and the checks.
 
 ```sh
 Planet --seed perihelion --exaggeration 5000 --video master.mp4 --bitrate 50
