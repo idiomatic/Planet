@@ -112,7 +112,9 @@ enum Video {
 
 /// A closed flight over the sunlit side, with the sun held still: the camera circles the point
 /// beneath the sun, through the highest peak, while its distance from that point, its altitude,
-/// and its view all vary periodically, so the last frame leads seamlessly into the first.
+/// and its view all vary periodically, so the last frame leads seamlessly into the first. Halfway
+/// round, it swings out until the sun stands just above the visible horizon, past the terminator
+/// (the ground below falls into dusk), and turns toward it.
 struct LoopingFlight {
     private let center: SIMD3<Double>
     private let e1: SIMD3<Double>
@@ -120,6 +122,8 @@ struct LoopingFlight {
     private let radius: Double
     private let floor: Double
     private let seconds: Double
+    /// How far below the horizontal the horizon lies at the sunset, seen from its low altitude.
+    private let dip: Double
 
     @MainActor
     init(planet: Planet, view: ViewValues, floor: Float) {
@@ -140,6 +144,7 @@ struct LoopingFlight {
         e1 = normalize(summit - center * dot(summit, center))
         e2 = cross(center, e1)
         self.floor = Double(floor)
+        dip = acos(1 / (Double(floor) + Self.low))
     }
 
     private static func sun(_ view: ViewValues, _ seconds: Double, _ point: SIMD3<Double>) -> Double {
@@ -147,14 +152,26 @@ struct LoopingFlight {
         return dot(SIMD3(Double(s.x), Double(s.y), Double(s.z)), point)
     }
 
+    /// How far the loop has swung out toward the low sun: 0 at the summit, 1 halfway round.
+    private static func sunset(_ u: Double) -> Double {
+        pow(0.5 - 0.5 * cos(2 * Double.pi * u), 3)
+    }
+
     /// The camera `u` (0...1) of the way around the loop.
     func camera(at u: Double) -> Camera {
         let position = point(u)
-        // Look ahead along the path, below the camera's own altitude.
-        let ahead = direction(u + 0.03) * (floor + altitude(u) * 0.15)
+        // Look ahead along the path, below the camera's own altitude...
+        let ahead = normalize(direction(u + 0.03) * (floor + altitude(u) * 0.15) - position)
+        // ...turning, near the low sun, toward it, a little below the horizon.
+        let up = normalize(position)
+        // Pitched to the horizon, then up a little, so the sun sits above the frame's center.
+        let pitch = dip - 0.1
+        let sunward = normalize(center - up * dot(center, up)) * cos(pitch) - up * sin(pitch)
+        let w = pow(Self.sunset(u), 2)
+        let look = normalize(ahead * (1 - w) + sunward * w)
         return Camera(
             position: SIMD3<Float>(position),
-            target: SIMD3<Float>(ahead),
+            target: SIMD3<Float>(position + look),
             seconds: seconds
         )
     }
@@ -166,13 +183,19 @@ struct LoopingFlight {
     private func direction(_ u: Double) -> SIMD3<Double> {
         let tau = 2 * Double.pi
         let around = tau * u
-        let away = min(max(radius + 0.18 * sin(3 * tau * u), 0.15), 1.4)
+        // The distance from beneath the sun swings ±0.12 radians, and out halfway round until the
+        // sun stands 3° above the visible horizon.
+        let far = (90 - 3) * Double.pi / 180 + dip
+        let wiggle = min(max(radius + 0.12 * sin(3 * tau * u), 0.15), far)
+        let away = wiggle + (far - wiggle) * Self.sunset(u)
         return center * cos(away) + (e1 * cos(around) + e2 * sin(around)) * sin(away)
     }
 
+    private static let low = 0.015
+
     /// Height above the floor, in radii: low over the summit at the start, twice around the loop.
     private func altitude(_ u: Double) -> Double {
-        let low = 0.015, high = 0.22
+        let low = Self.low, high = 0.22
         return low + (high - low) * (0.5 - 0.5 * cos(2 * 2 * Double.pi * u))
     }
 }

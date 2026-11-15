@@ -5,9 +5,10 @@ How [demo.mp4](demo.mp4) and its poster, [demo-poster.jpg](demo-poster.jpg), are
 ## Direction
 
 * **Planet:** seed `perihelion`, otherwise Earth's defaults, with relief exaggerated 50× (`--exaggeration 5000`), so the mountains read from altitude.
-* **Light:** the sun holds still, about 50° from the zenith over the highest peak, so the relief is lit obliquely throughout and there's no night.
-* **Path:** one closed loop around the point beneath the sun, through the highest peak, so the whole flight stays on the sunlit side. Along it:
-  * the distance from that point swings ±0.18 radians, three times around the loop;
+* **Light:** the sun holds still, about 50° from the zenith over the highest peak, so the relief is lit obliquely, except at the sunset.
+* **Path:** one closed loop around the point beneath the sun, through the highest peak, on the sunlit side. Along it:
+  * the distance from that point swings ±0.12 radians, three times around the loop;
+  * halfway round, low over the ground, it swings out past the terminator until the sun stands 3° above the visible horizon, and the camera turns toward it: a sunset, with the ground below in dusk (with relief exaggerated 50×, the camera's floor, the highest peak, is too high to see the sun near the horizon with the ground below still lit);
   * the altitude rises from 0.015 to 0.22 radii above the floor and back, twice, starting low over the summit;
   * the camera looks ahead along the path and down, aiming about 3% of the loop ahead.
 * **Loop:** every motion is periodic in the loop's progress, so the last frame leads into the first without a seam.
@@ -33,10 +34,10 @@ for pass in 1 2; do
 done
 ```
 
-The poster is frame 3,000 (50 seconds in, a fjord coastline), at 1280 pixels wide:
+The poster is frame 2,400 (40 seconds in, a fjord coastline), at 1280 pixels wide:
 
 ```sh
-ffmpeg -y -i master.mp4 -vf "select='eq(n\,3000)',scale=1280:-1" \
+ffmpeg -y -i master.mp4 -vf "select='eq(n\,2400)',scale=1280:-1" \
   -frames:v 1 -q:v 2 docs/demo-poster.jpg
 ```
 
@@ -50,7 +51,7 @@ ffmpeg -y -i master.mp4 -vf "select='not(mod(n\,600))',scale=640:-1,tile=4x3" \
 ## Checks
 
 * **Size:** under 50 MB, GitHub's warning threshold (the current copy is 43 MB). Each re-recording adds its size to the repository's history, so re-record only when the look has changed meaningfully.
-* **Quality:** SSIM above 0.99 against the master (the current copy is 0.994, PSNR 50.7 dB):
+* **Quality:** SSIM above 0.99 against the master (the current copy is 0.996, PSNR 52.1 dB):
 
   ```sh
   ffmpeg -i docs/demo.mp4 -i master.mp4 -lavfi "[0:v][1:v]ssim;[0:v][1:v]psnr" -f null -

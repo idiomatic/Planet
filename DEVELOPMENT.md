@@ -57,7 +57,3 @@
 ## Biome
 
 * derived from terrain and climate
-
-## Demo video
-
-* the next re-recording ([docs/demo.md](docs/demo.md)) includes a sunrise or sunset while staying illuminated: the sun still holds still, but part of the loop swings out toward the terminator, until the sun stands a few degrees above the local horizon (allowing for the horizon's dip at the camera's altitude), never below it; there the camera looks toward the low sun, so the scattering reddens the sky and long shadows rake the relief, then the loop returns to the high sun
