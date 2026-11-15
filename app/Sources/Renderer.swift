@@ -29,8 +29,14 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let depthState: MTLDepthStencilState
     let patches: PatchCache
     private var values: ViewValues { settings.values }
-    /// Radii per meter of elevation, with exaggeration and the radius.
-    private var scale: Float { Float(values.exaggeration / 100 / values.radius) }
+    /// Radii per meter of the core's elevation, with exaggeration. Relief is relative to the
+    /// planet's own radius (the core's Earth-scale elevations scale with it), so the radius
+    /// doesn't enter: 100% gives Earth's proportions at any size.
+    private var scale: Float { Renderer.scale(values) }
+
+    private static func scale(_ values: ViewValues) -> Float {
+        Float(values.exaggeration / 100 / ViewValues.earth.radius)
+    }
     /// Sea level, in meters.
     private var seaLevel: Float { planet.seaLevel(percent: values.seaLevel) }
     /// The camera stays at least this far from the center, in radii: above the highest point,
@@ -121,7 +127,7 @@ final class Renderer: NSObject, MTKViewDelegate {
 
         let values = settings.values
         guard let patches = PatchCache(
-            planet: planet, device: device, scale: Float(values.exaggeration / 100 / values.radius),
+            planet: planet, device: device, scale: Renderer.scale(values),
             seaLevel: planet.seaLevel(percent: values.seaLevel))
         else { return nil }
         patches.targetPixels = Float(values.detail)

@@ -5,9 +5,9 @@ import simd
 /// Live parameters and render settings: they change only the view, so they can change while
 /// flying. Percentages are in percent; defaults are Earth's.
 struct ViewValues: Equatable {
-    /// Radial exaggeration (%).
+    /// Radial exaggeration (%), relative to the planet's radius: 100% is Earth's proportions.
     var exaggeration = 100.0
-    /// Planet radius (% of Earth).
+    /// Planet radius (% of Earth). Relief scales with it, so it changes only lengths in km.
     var radiusScale = 100.0
     /// Sea level (% of the surface elevation range, from lowest to highest).
     var seaLevel = 55.0

@@ -36,15 +36,15 @@ Generation parameters (the sidebar's Planet section), applied by Generate or Ret
 
 Live parameters (the View section), which change only the view, so they apply as they change, and switches set their starting values; they persist across generated planets:
 
-* radial exaggeration (%, 1–1,000,000; keys `-` and `=`, four steps of 2^¼ doubling or halving)
-* planet radius (% of Earth): scales the display like exaggeration, and the air and kilometer readouts
+* radial exaggeration (%, 1–1,000,000; keys `-` and `=`, four steps of 2^¼ doubling or halving), relative to the planet's own radius: 100% gives Earth's proportions at any size
+* planet radius (% of Earth): the core's Earth-scale elevations scale with it, so it changes only lengths in kilometers (readouts), not the view
 * sea level (% of the surface elevation range, from lowest to highest; default 55%)
 * air density (relative to Earth, 0–100; keys `[` and `]`; 0 is no atmosphere): H turns it off and back on to its last nonzero value
 * axial tilt (degrees), day length and year length (relative to Earth): the sun's direction is a pure function of these and time (`pl_sun_direction`)
 * detail (pixels): patches are refined while their triangles exceed it (default 12)
 * exposure (default 0.25) and vertical field of view (degrees, default 60)
 
-Exaggeration, radius, and sea level move the surface, so changing them refits the cached patches' bounds and skirts and keeps the camera above the new floor; the rest only redraw. The live values are one observed model (`ViewSettings`) that the sidebar binds to, the keys change, and the renderer watches and clamps (not in a `didSet`, which under `@Observable` recurses).
+Exaggeration and sea level move the surface, so changing them refits the cached patches' bounds and skirts and keeps the camera above the new floor; the rest only redraw. The live values are one observed model (`ViewSettings`) that the sidebar binds to, the keys change, and the renderer watches and clamps (not in a `didSet`, which under `@Observable` recurses).
 
 ## Viewer
 
