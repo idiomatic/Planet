@@ -40,7 +40,7 @@ Live parameters (the View section), which change only the view, so they apply as
 * sea level (% of the surface elevation range, from lowest to highest; default 55%)
 * air density (relative to Earth, 0–100; keys `[` and `]`; 0 is no atmosphere): H turns it off and back on to its last nonzero value; its logarithmic slider (0.01–100) reaches 0 at its leftmost position, as relief's, day length's, and year length's do (region scale, detail, and exposure have no meaningful 0)
 * axial tilt (degrees), day length and year length (relative to Earth; 0 is no spin, so the sun holds still in the sky, or no orbit, so no seasons; with day length 0 the day readout shows —): the sun's direction is a pure function of these and time (`pl_sun_direction`)
-* detail (pixels): patches are refined while their triangles exceed it (default 12)
+* detail (whole pixels, 2–200; default 12): patches are refined while their triangles exceed it; its logarithmic slider (3–48) rounds to whole pixels
 * exposure (default 0.25) and vertical field of view (degrees, default 60)
 * planet radius (% of Earth; last, and disabled in the sidebar, so set only by `--radius`): the core's Earth-scale elevations scale with it, so it changes only lengths in kilometers (readouts), not the view
 

@@ -31,7 +31,8 @@ struct LaunchOptions {
           --tilt <degrees>       axial tilt (default 23.44)
           --day <× Earth>        day length (default 1)
           --year <× Earth>       year length (default 1)
-          --detail <pixels>      refine patches whose triangles exceed this (default 12)
+          --detail <pixels>      refine patches whose triangles exceed this (whole pixels,
+                                 2–200; default 12)
           --exposure <n>         exposure for the atmosphere (default 0.25)
           --fov <degrees>        vertical field of view (default 60)
 

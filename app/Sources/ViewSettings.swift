@@ -20,7 +20,7 @@ struct ViewValues: Equatable {
     var dayLength = 1.0
     /// Year length (× Earth).
     var yearLength = 1.0
-    /// Detail: the triangle edge, in pixels, above which a patch is refined.
+    /// Detail: the triangle edge, in whole pixels, above which a patch is refined.
     var detail = 12.0
     /// Exposure for the atmosphere's tone mapping.
     var exposure = 0.25
@@ -38,7 +38,7 @@ struct ViewValues: Equatable {
         axialTilt = min(max(axialTilt, -180), 180)
         dayLength = max(dayLength, 0) // 0: no spin
         yearLength = max(yearLength, 0) // 0: no orbit
-        detail = min(max(detail, 2), 200)
+        detail = min(max(detail.rounded(), 2), 200) // whole pixels
         exposure = min(max(exposure, 0.01), 10)
         fieldOfView = min(max(fieldOfView, 5), 150)
     }

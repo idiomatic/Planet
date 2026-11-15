@@ -64,7 +64,7 @@ struct Sidebar: View {
                     row("Axial tilt (°)", $settings.values.axialTilt, .linear(0...90), earth: ViewValues.earth.axialTilt)
                     row("Day length (× Earth)", $settings.values.dayLength, .logarithmic(0.01...100, zeroAtStart: true), earth: ViewValues.earth.dayLength)
                     row("Year length (× Earth)", $settings.values.yearLength, .logarithmic(0.01...100, zeroAtStart: true), earth: ViewValues.earth.yearLength)
-                    row("Detail (pixels; smaller is finer)", $settings.values.detail, .logarithmic(3...48), earth: ViewValues.earth.detail)
+                    row("Detail (pixels; smaller is finer)", $settings.values.detail, .logarithmic(3...48, integer: true), earth: ViewValues.earth.detail)
                     row("Exposure", $settings.values.exposure, .logarithmic(0.05...2), earth: ViewValues.earth.exposure)
                     row("Field of view (°)", $settings.values.fieldOfView, .linear(10...120), earth: ViewValues.earth.fieldOfView)
                     // Relief is relative to the radius, so it changes only lengths in km (readouts);
@@ -104,14 +104,19 @@ struct Sidebar: View {
     /// tilt (which can be negative), and field of view are linear.
     private enum Scale {
         /// With `zeroAtStart`, the slider's leftmost position is 0 (e.g., no air), which a
-        /// logarithmic scale can't otherwise reach.
-        case logarithmic(ClosedRange<Double>, zeroAtStart: Bool = false)
+        /// logarithmic scale can't otherwise reach; with `integer`, values are whole numbers.
+        case logarithmic(ClosedRange<Double>, zeroAtStart: Bool = false, integer: Bool = false)
         case linear(ClosedRange<Double>)
+
+        var integer: Bool {
+            if case .logarithmic(_, _, let integer) = self { return integer }
+            return false
+        }
 
         /// Where `x` falls along the slider, 0...1.
         func fraction(of x: Double) -> Double {
             switch self {
-            case .logarithmic(let r, _):
+            case .logarithmic(let r, _, _):
                 return min(max((log10(x) - log10(r.lowerBound)) / (log10(r.upperBound) - log10(r.lowerBound)), 0), 1)
             case .linear(let r):
                 return min(max((x - r.lowerBound) / (r.upperBound - r.lowerBound), 0), 1)
@@ -127,19 +132,21 @@ struct Sidebar: View {
             HStack {
                 Text(label).font(.callout)
                 Spacer()
-                TextField(label, value: value, format: .number)
+                TextField(label, value: value, format: scale.integer ? .number.precision(.fractionLength(0)) : .number)
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 80)
                     .labelsHidden()
             }
             switch scale {
-            case .logarithmic(let range, let zeroAtStart):
+            case .logarithmic(let range, let zeroAtStart, let integer):
                 Slider(
                     value: Binding(
                         get: { log10(min(max(value.wrappedValue, range.lowerBound), range.upperBound)) },
                         set: {
-                            value.wrappedValue = zeroAtStart && $0 <= log10(range.lowerBound) ? 0 : Self.rounded(pow(10, $0))
+                            let x = pow(10, $0)
+                            value.wrappedValue = zeroAtStart && $0 <= log10(range.lowerBound)
+                                ? 0 : integer ? x.rounded() : Self.rounded(x)
                         }
                     ),
                     in: log10(range.lowerBound)...log10(range.upperBound)
