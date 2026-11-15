@@ -17,7 +17,7 @@ zig build run   # build and launch
 zig build test  # core tests
 ```
 
-Enter a seed (any text, such as `perihelion`) in the sidebar and choose Generate. The sidebar's View section adjusts the rest while you fly; ticks under the sliders mark Earth's values. Drag to look; scroll to zoom; W/S, A/D, and R/F fly; Q/E roll; Shift goes faster; M shows the mesh; B toggles LOD blending; H turns the air off and on, `[` and `]` adjust its density, and `-` and `=` adjust the relief; `,` and `.` slow and speed time. The globe button starts a new planet.
+Enter a seed (any text, such as `perihelion`) in the sidebar and choose Generate. The sidebar's View section adjusts the rest while you fly; ticks under the sliders mark Earth's values. Drag to look; scroll to zoom; W/S, A/D, and R/F fly; Q/E roll; Shift goes faster; M shows the mesh; B toggles LOD blending; H turns the air off and on, `[` and `]` adjust its density, and `-` and `=` adjust the relief; `,` and `.` slow and speed time; Space pauses and resumes it. Edit the seed or region scale and choose Generate for a new planet; the globe button resets everything to Earth's values.
 
 Command-line switches open straight to a planet, with the sidebar closed unless `--sidebar open`; `--help` lists them:
 

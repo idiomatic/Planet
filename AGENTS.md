@@ -49,7 +49,7 @@ Exaggeration and sea level move the surface, so changing them refits the cached 
 ## Viewer
 
 * simplified flight controls: drag to look; the scroll wheel or trackpad zooms along the view direction, by a fraction of the altitude; W/S, A/D, and R/F move; Q/E roll; Shift is faster; speed scales with altitude; the camera stays above the terrain
-* time speed (%, default 360,000%, i.e., an hour per second; 0 pauses): `,` and `.` divide and multiply it by 10, stepping between 1% and 0
+* time speed (%, default 360,000%, i.e., an hour per second; 0 pauses): `,` and `.` divide and multiply it by 10, stepping between 1% and 0; Space pauses and resumes at the last nonzero speed
 * M (or `--mesh on`) toggles drawing the mesh's edges over the surface; B (or `--lod-blend off`) toggles LOD blending; H turns the air off and on, `[` and `]` adjust its density, and `-` and `=` adjust the relief
 * draws only when something changes: continuously while a movement key is held (up to 120 fps) or time runs (30 fps), otherwise once per change (drag, scroll, toggle, resize, or a newly generated patch); idle with time paused uses no CPU
 * readouts update at most 4 times a second while drawing continuously

@@ -91,7 +91,7 @@ struct Sidebar: View {
             }
             Text("""
                 Drag: look · Wheel: zoom · W/S, A/D, R/F: move · Q/E: roll · Shift: faster · \
-                M: mesh · B: blend · H: air off/on · [ ]: air · − =: relief · , .: time · \
+                M: mesh · B: blend · H: air off/on · [ ]: air · − =: relief · Space: pause · , .: time · \
                 ⌃⌘I: sidebar
                 """)
                 .font(.caption)

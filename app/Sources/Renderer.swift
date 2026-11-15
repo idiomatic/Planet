@@ -76,9 +76,12 @@ final class Renderer: NSObject, MTKViewDelegate {
     var timeSpeed = 360_000.0 {
         didSet {
             timeSpeed = min(max(timeSpeed, 0), 1e9)
+            if timeSpeed > 0 { lastTimeSpeed = timeSpeed }
             updateDrawLoop()
         }
     }
+    /// The speed Space restores after pausing.
+    private var lastTimeSpeed = 360_000.0
 
     /// Altitude, in radii, below which flight and zoom stop slowing (~3 km at Earth's radius),
     /// so the camera can leave the floor quickly.
@@ -231,6 +234,8 @@ final class Renderer: NSObject, MTKViewDelegate {
             settings.values.exaggeration /= Renderer.liveStep
         case "=":
             settings.values.exaggeration = values.exaggeration > 0 ? values.exaggeration * Renderer.liveStep : 10
+        case " ":
+            if !repeated { timeSpeed = timeSpeed > 0 ? 0 : lastTimeSpeed }
         case ",":
             if !repeated { timeSpeed = timeSpeed > 1 ? max(timeSpeed / 10, 1) : 0 }
         case ".":
