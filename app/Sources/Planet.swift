@@ -1,7 +1,7 @@
 import Foundation
 
-/// Parameters as the sheet shows them; percentages are in percent.
-struct PlanetParameters {
+/// Parameters as the panel shows them; percentages are in percent. Defaults are Earth's.
+struct PlanetParameters: Equatable {
     var seed = ""
     var radiusScale = 100.0
     var radialExaggeration = 100.0
@@ -10,6 +10,13 @@ struct PlanetParameters {
     var axialTilt = 23.44
     var dayLength = 1.0
     var yearLength = 1.0
+
+    /// These parameters with Earth's values, keeping the seed.
+    var earthlike: PlanetParameters {
+        var earth = PlanetParameters()
+        earth.seed = seed
+        return earth
+    }
 
     var seedValue: UInt64 {
         let bytes = Array(seed.utf8)

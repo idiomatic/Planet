@@ -11,7 +11,18 @@ struct ParameterPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("New Planet").font(.title2.bold())
+            HStack {
+                Text("New Planet").font(.title2.bold())
+                Spacer()
+                Button("Reset to Earth", systemImage: "globe.europe.africa.fill") {
+                    parameters = parameters.earthlike
+                }
+                .labelStyle(.iconOnly)
+                .buttonStyle(.borderless)
+                .font(.title2)
+                .help("Reset to Earth (keeps the seed)")
+                .disabled(parameters == parameters.earthlike)
+            }
             Grid(alignment: .leading, verticalSpacing: 8) {
                 GridRow {
                     Text("Seed")
