@@ -2,6 +2,10 @@
 
 A procedurally generated Earth-like planet viewer for macOS. [AGENTS.md](AGENTS.md) is the specification; [DEVELOPMENT.md](DEVELOPMENT.md) lists planned work.
 
+[![A two-minute looping flight over the planet "perihelion," with relief exaggerated 50×](docs/demo-poster.jpg)](docs/demo.mp4)
+
+[Watch the flight](docs/demo.mp4): two minutes, looping, over the planet "perihelion" with relief exaggerated 50× (1080p60, 43 MB).
+
 ![The planet "perihelion" from orbit](docs/perihelion.png)
 
 ## Building and running
@@ -42,6 +46,19 @@ To render a looping flight video (2 minutes at 1080p60 takes about a minute on a
 ```sh
 "zig-out/Planet.app/Contents/MacOS/Planet" \
   --seed perihelion --exaggeration 5000 --video demo.mp4
+```
+
+The demo above was rendered at 50 Mbps, then re-encoded with x264 to fit the repository (SSIM 0.996 and PSNR 50 dB against the master):
+
+```sh
+Planet --seed perihelion --exaggeration 5000 --video master.mp4 --bitrate 50
+for pass in 1 2; do
+  ffmpeg -y -i master.mp4 -c:v libx264 -preset slow -b:v 2900k \
+    -maxrate 4500k -bufsize 9000k -pass $pass -profile:v high \
+    -pix_fmt yuv420p -g 120 -color_primaries bt709 -color_trc bt709 \
+    -colorspace bt709 -movflags +faststart -an \
+    $([ $pass = 1 ] && echo "-f mp4 /dev/null" || echo docs/demo.mp4)
+done
 ```
 
 The elevation is a placeholder (warped fractal noise) until tectonics lands.
