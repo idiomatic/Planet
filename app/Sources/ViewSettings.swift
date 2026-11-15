@@ -31,8 +31,8 @@ struct ViewValues: Equatable {
 
     /// Ranges the values are clamped to.
     mutating func clamp() {
-        exaggeration = min(max(exaggeration, 0), 1_000_000)
-        radiusScale = min(max(radiusScale, 0.01), 100_000)
+        exaggeration = min(max(exaggeration.rounded(), 0), 1_000_000) // whole percent
+        radiusScale = min(max(radiusScale.rounded(), 1), 100_000) // whole percent
         seaLevel = min(max(seaLevel, 0), 100)
         airDensity = min(max(airDensity, 0), 100)
         axialTilt = min(max(axialTilt, -180), 180)
@@ -40,7 +40,7 @@ struct ViewValues: Equatable {
         yearLength = max(yearLength, 0) // 0: no orbit
         detail = min(max(detail.rounded(), 2), 200) // whole pixels
         exposure = min(max(exposure, 0.01), 10)
-        fieldOfView = min(max(fieldOfView, 5), 150)
+        fieldOfView = min(max(fieldOfView.rounded(), 5), 150) // whole degrees
     }
 
     /// The planet's radius, in meters.

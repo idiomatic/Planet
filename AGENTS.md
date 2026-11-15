@@ -36,13 +36,13 @@ Generation parameters (the sidebar's Planet section), applied by Generate or Ret
 
 Live parameters (the View section), which change only the view, so they apply as they change, and switches set their starting values; they persist across generated planets:
 
-* radial exaggeration (%, 0–1,000,000; keys `-` and `=`, four steps of 2^¼ doubling or halving, `=` from 0 going to 10%), relative to the planet's own radius: 100% gives Earth's proportions at any size, 0 a smooth ball
-* sea level (% of the surface elevation range, from lowest to highest; default 55%)
+* radial exaggeration (whole percent, 0–1,000,000; keys `-` and `=`, four steps of 2^¼ doubling or halving, `=` from 0 going to 10%), relative to the planet's own radius: 100% gives Earth's proportions at any size, 0 a smooth ball
+* sea level (% of the surface elevation range, from lowest to highest; default 55%; the slider steps whole percents, but typed fractions are kept)
 * air density (relative to Earth, 0–100; keys `[` and `]`; 0 is no atmosphere): H turns it off and back on to its last nonzero value; its logarithmic slider (0.01–100) reaches 0 at its leftmost position, as relief's, day length's, and year length's do (region scale, detail, and exposure have no meaningful 0)
 * axial tilt (degrees), day length and year length (relative to Earth; 0 is no spin, so the sun holds still in the sky, or no orbit, so no seasons; with day length 0 the day readout shows —): the sun's direction is a pure function of these and time (`pl_sun_direction`)
 * detail (whole pixels, 2–200; default 12): patches are refined while their triangles exceed it; its logarithmic slider (3–48) rounds to whole pixels
-* exposure (default 0.25) and vertical field of view (degrees, default 60)
-* planet radius (% of Earth; last, and disabled in the sidebar, so set only by `--radius`): the core's Earth-scale elevations scale with it, so it changes only lengths in kilometers (readouts), not the view
+* exposure (default 0.25) and vertical field of view (whole degrees, 5–150; default 60)
+* planet radius (whole percent of Earth, 1–100,000; last, and disabled in the sidebar, so set only by `--radius`): the core's Earth-scale elevations scale with it, so it changes only lengths in kilometers (readouts), not the view
 
 Exaggeration and sea level move the surface, so changing them refits the cached patches' bounds and skirts and keeps the camera above the new floor; the rest only redraw. The live values are one observed model (`ViewSettings`) that the sidebar binds to, the keys change, and the renderer watches and clamps (not in a `didSet`, which under `@Observable` recurses).
 

@@ -58,18 +58,19 @@ struct Sidebar: View {
                 Divider()
                 Text("View").font(.headline)
                 VStack(alignment: .leading, spacing: 10) {
-                    row("Relief (%)", $settings.values.exaggeration, .logarithmic(10...100_000, zeroAtStart: true), earth: ViewValues.earth.exaggeration)
-                    row("Sea level (% of elevation range)", $settings.values.seaLevel, .linear(0...100), earth: ViewValues.earth.seaLevel)
+                    row("Relief (%)", $settings.values.exaggeration, .logarithmic(10...100_000, zeroAtStart: true, integer: true), earth: ViewValues.earth.exaggeration)
+                    row("Sea level (% of elevation range)", $settings.values.seaLevel, .linear(0...100, integer: true), earth: ViewValues.earth.seaLevel,
+                        typedDecimals: true)
                     row("Air density (× Earth)", $settings.values.airDensity, .logarithmic(0.01...100, zeroAtStart: true), earth: ViewValues.earth.airDensity)
                     row("Axial tilt (°)", $settings.values.axialTilt, .linear(0...90), earth: ViewValues.earth.axialTilt)
                     row("Day length (× Earth)", $settings.values.dayLength, .logarithmic(0.01...100, zeroAtStart: true), earth: ViewValues.earth.dayLength)
                     row("Year length (× Earth)", $settings.values.yearLength, .logarithmic(0.01...100, zeroAtStart: true), earth: ViewValues.earth.yearLength)
                     row("Detail (pixels; smaller is finer)", $settings.values.detail, .logarithmic(3...48, integer: true), earth: ViewValues.earth.detail)
                     row("Exposure", $settings.values.exposure, .logarithmic(0.05...2), earth: ViewValues.earth.exposure)
-                    row("Field of view (°)", $settings.values.fieldOfView, .linear(10...120), earth: ViewValues.earth.fieldOfView)
+                    row("Field of view (°)", $settings.values.fieldOfView, .linear(10...120, integer: true), earth: ViewValues.earth.fieldOfView)
                     // Relief is relative to the radius, so it changes only lengths in km (readouts);
                     // shown for reference, set by --radius, until physics uses it.
-                    row("Radius (% of Earth)", $settings.values.radiusScale, .logarithmic(1...1000), earth: ViewValues.earth.radiusScale)
+                    row("Radius (% of Earth)", $settings.values.radiusScale, .logarithmic(1...1000, integer: true), earth: ViewValues.earth.radiusScale)
                         .disabled(true)
                         .help("Affects only lengths in kilometers for now; set with --radius")
                 }
@@ -104,13 +105,15 @@ struct Sidebar: View {
     /// tilt (which can be negative), and field of view are linear.
     private enum Scale {
         /// With `zeroAtStart`, the slider's leftmost position is 0 (e.g., no air), which a
-        /// logarithmic scale can't otherwise reach; with `integer`, values are whole numbers.
+        /// logarithmic scale can't otherwise reach. With `integer`, the slider gives whole numbers,
+        /// where fractions mean nothing; otherwise 3 significant digits.
         case logarithmic(ClosedRange<Double>, zeroAtStart: Bool = false, integer: Bool = false)
-        case linear(ClosedRange<Double>)
+        case linear(ClosedRange<Double>, integer: Bool = false)
 
         var integer: Bool {
-            if case .logarithmic(_, _, let integer) = self { return integer }
-            return false
+            switch self {
+            case .logarithmic(_, _, let integer), .linear(_, let integer): return integer
+            }
         }
 
         /// Where `x` falls along the slider, 0...1.
@@ -118,7 +121,7 @@ struct Sidebar: View {
             switch self {
             case .logarithmic(let r, _, _):
                 return min(max((log10(x) - log10(r.lowerBound)) / (log10(r.upperBound) - log10(r.lowerBound)), 0), 1)
-            case .linear(let r):
+            case .linear(let r, _):
                 return min(max((x - r.lowerBound) / (r.upperBound - r.lowerBound), 0), 1)
             }
         }
@@ -126,13 +129,19 @@ struct Sidebar: View {
 
     /// A label and an editable number, with a slider beneath, marked with a tick at Earth's value
     /// (the default, for render settings), which snaps the slider there when clicked. The number
-    /// may go beyond the slider's range; the slider then rests at its end.
-    private func row(_ label: String, _ value: Binding<Double>, _ scale: Scale, earth: Double) -> some View {
+    /// may go beyond the slider's range; the slider then rests at its end. A whole-number slider's
+    /// field shows whole numbers too, unless `typedDecimals` (sea level: the slider steps whole
+    /// percents, but a typed fraction still means something).
+    private func row(
+        _ label: String, _ value: Binding<Double>, _ scale: Scale, earth: Double, typedDecimals: Bool = false
+    ) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text(label).font(.callout)
                 Spacer()
-                TextField(label, value: value, format: scale.integer ? .number.precision(.fractionLength(0)) : .number)
+                TextField(
+                    label, value: value,
+                    format: scale.integer && !typedDecimals ? .number.precision(.fractionLength(0)) : .number)
                     .textFieldStyle(.roundedBorder)
                     .multilineTextAlignment(.trailing)
                     .frame(width: 80)
@@ -153,11 +162,11 @@ struct Sidebar: View {
                 )
                 .controlSize(.small)
                 .overlay(alignment: .bottom) { earthTick(at: scale.fraction(of: earth), value, earth) }
-            case .linear(let range):
+            case .linear(let range, let integer):
                 Slider(
                     value: Binding(
                         get: { min(max(value.wrappedValue, range.lowerBound), range.upperBound) },
-                        set: { value.wrappedValue = Self.rounded($0) }
+                        set: { value.wrappedValue = integer ? $0.rounded() : Self.rounded($0) }
                     ),
                     in: range
                 )
