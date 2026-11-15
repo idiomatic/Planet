@@ -36,6 +36,7 @@ struct LaunchOptions {
         Controls:
           --time-speed <%>       100 is real time, 0 pauses (default 360000)
           --mesh <on|off>        draw the mesh's edges (default off; M toggles)
+          --lod-blend <on|off>   blend between levels of detail (default on; B toggles)
 
         Snapshot:
           --snapshot <png>       render one frame to a PNG and exit, without a window
@@ -51,7 +52,8 @@ struct LaunchOptions {
 
     private static let switches: Set = [
         "--seed", "--radius", "--exaggeration", "--region-scale", "--sea-level", "--tilt", "--day",
-        "--year", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--mesh", "--snapshot",
+        "--year", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--mesh",
+        "--lod-blend", "--snapshot",
         "--size", "--benchmark",
     ]
 
@@ -71,6 +73,7 @@ struct LaunchOptions {
     var parameters = PlanetParameters()
     var timeSpeed: Double?
     var showMesh = false
+    var blendLevels = true
     var snapshot: String?
     var size = [1280, 800]
     var benchmarkFrames: Int?
@@ -108,6 +111,7 @@ struct LaunchOptions {
 
         timeSpeed = value("--time-speed").flatMap(Double.init)
         showMesh = value("--mesh") == "on"
+        blendLevels = value("--lod-blend") != "off"
         snapshot = value("--snapshot")
         benchmarkFrames = value("--benchmark").flatMap(Int.init).map { max($0, 1) }
         if let s = value("--size")?.split(separator: "x").compactMap({ Int($0) }), s.count == 2 {

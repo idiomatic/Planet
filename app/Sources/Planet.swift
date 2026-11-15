@@ -63,7 +63,7 @@ final class Planet: @unchecked Sendable {
     var minElevation: Float { up_planet_min_elevation(handle) }
     var maxElevation: Float { up_planet_max_elevation(handle) }
 
-    /// Writes the patch's vertices; `out` holds up_patch_vertex_count() × 8 floats.
+    /// Writes the patch's vertices; `out` holds up_patch_vertex_count() × 12 floats.
     func generatePatch(_ key: PatchKey, into out: inout [Float]) {
         up_patch_generate(handle, key.level, key.face, key.path, &out)
     }

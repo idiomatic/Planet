@@ -7,6 +7,9 @@ struct Uniforms {
     float4 sun;        // xyz: unit vector toward the sun
     float4 elevation;  // x: min, y: sea level, z: max (meters); w: 1 when drawing mesh edges
     float4 display;    // x: radii per meter of elevation, with exaggeration
+    float4 camera;     // xyz: position, in radii
+    float4 lod;        // x: pixels per radian, y: split threshold in pixels, z: 1 to blend levels,
+                       // w: blend band, as a fraction of the threshold
 };
 
 // A patch vertex, as the core writes it.
@@ -15,6 +18,13 @@ struct Vertex {
     float elevation;   // meters
     packed_float3 gradient; // tangential elevation gradient, meters per radian
     float skirt;       // 1 on a skirt's lower edge
+    float parentElevation;  // what the parent patch shows here
+    packed_float3 parentGradient;
+};
+
+struct PatchConstants {
+    float skirtDepth;  // radii
+    float parentEdge;  // the parent's lattice triangle edge, in radii; 0 without a parent
 };
 
 struct Fragment {
@@ -26,17 +36,31 @@ struct Fragment {
 vertex Fragment vertexMain(uint id [[vertex_id]],
                            const device Vertex *vertices [[buffer(0)]],
                            constant Uniforms &u [[buffer(1)]],
-                           constant float &skirtDepth [[buffer(2)]]) {
+                           constant PatchConstants &patch [[buffer(2)]]) {
     Vertex v = vertices[id];
     float3 d = float3(v.direction);
     float s = u.display.x;
     float sea = u.elevation.y;
+
+    // Blend from the parent's shape, where the parent would just have split (its triangles at
+    // the threshold), to this patch's own, by the time they're half again larger (the blend
+    // band, lod.w). It must end before this patch splits (at twice the threshold) across the
+    // whole patch, whose far side lies about 15% farther than its near side.
+    float morph = 1;
+    if (u.lod.z > 0 && patch.parentEdge > 0) {
+        float distance = length(d * (1 + s * max(v.elevation, sea)) - u.camera.xyz);
+        float pixels = patch.parentEdge / max(distance, 1e-7) * u.lod.x;
+        morph = saturate((pixels / u.lod.y - 1) / u.lod.w);
+    }
+    float e = mix(v.parentElevation, v.elevation, morph);
+    float3 g = mix(float3(v.parentGradient), float3(v.gradient), morph);
+
     // Oceans are flat at sea level; skirts hang below the patch's edges to hide cracks.
-    float r = 1 + s * max(v.elevation, sea) - skirtDepth * v.skirt;
+    float r = 1 + s * max(e, sea) - patch.skirtDepth * v.skirt;
     Fragment out;
     out.position = u.viewProjection * float4(d * r, 1);
-    out.normal = v.elevation < sea ? d : normalize(d * (1 + s * v.elevation) - s * float3(v.gradient));
-    out.elevation = v.elevation;
+    out.normal = e < sea ? d : normalize(d * (1 + s * e) - s * g);
+    out.elevation = e;
     return out;
 }
 

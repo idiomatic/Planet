@@ -21,6 +21,7 @@ enum Benchmark {
               let pass = renderer.offscreenPass(width: width, height: height)
         else { fail() }
         renderer.showMesh = options.showMesh
+        renderer.blendLevels = options.blendLevels
         renderer.patches.synchronous = true
         let afterRenderer = Memory.now()
 

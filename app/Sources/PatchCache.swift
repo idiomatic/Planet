@@ -20,13 +20,16 @@ final class Patch {
     let radius: Float
     /// How far the skirt hangs below the surface, in radii.
     let skirtDepth: Float
+    /// Edge of the parent's lattice triangles, in radii (0 for a base face, which has no parent).
+    let parentEdge: Float
     var lastUsed = 0
 
-    init(buffer: MTLBuffer, center: SIMD3<Float>, radius: Float, skirtDepth: Float) {
+    init(buffer: MTLBuffer, center: SIMD3<Float>, radius: Float, skirtDepth: Float, parentEdge: Float) {
         self.buffer = buffer
         self.center = center
         self.radius = radius
         self.skirtDepth = skirtDepth
+        self.parentEdge = parentEdge
     }
 }
 
@@ -72,7 +75,7 @@ final class PatchCache {
     private let maxInFlight = max(ProcessInfo.processInfo.activeProcessorCount * 2, 4)
     private var frame = 0
 
-    nonisolated private static let floatsPerVertex = 8
+    nonisolated private static let floatsPerVertex = 12
     private static let roots = (0..<20).map { PatchKey(level: 0, face: UInt32($0), path: 0) }
 
     init?(planet: Planet, device: MTLDevice, scale: Float) {
@@ -187,7 +190,9 @@ final class PatchCache {
         let center = (lo + hi) / 2
         let radius = points.map { length($0 - center) }.max() ?? 0
         let skirtDepth = Self.triangleEdge(key.level) + scale * 500
-        patches[key] = Patch(buffer: buffer, center: center, radius: radius, skirtDepth: skirtDepth)
+        let parentEdge = key.level > 0 ? 2 * Self.triangleEdge(key.level) : 0
+        patches[key] = Patch(
+            buffer: buffer, center: center, radius: radius, skirtDepth: skirtDepth, parentEdge: parentEdge)
     }
 
     private func evict() {

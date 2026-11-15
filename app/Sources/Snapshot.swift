@@ -13,6 +13,7 @@ enum Snapshot {
         renderer.patches.synchronous = true
         renderer.place(options.camera(for: planet))
         renderer.showMesh = options.showMesh
+        renderer.blendLevels = options.blendLevels
         guard let image = renderer.snapshot(width: options.size[0], height: options.size[1]),
               let destination = CGImageDestinationCreateWithURL(
                   URL(fileURLWithPath: output) as CFURL, UTType.png.identifier as CFString, 1, nil)

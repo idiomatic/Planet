@@ -42,8 +42,9 @@ uint32_t up_patch_surface_index_count(void); // the surface's indices come first
 uint32_t up_patch_index_count(void);         // ...then the skirts'
 void up_patch_indices(uint32_t *out);        // shared by every patch
 
-// Writes up_patch_vertex_count() vertices of 8 floats: unit direction (3), elevation in
-// meters, tangential elevation gradient in meters per radian (3), and skirt (0 or 1).
+// Writes up_patch_vertex_count() vertices of 12 floats: unit direction (3), elevation in
+// meters, tangential elevation gradient in meters per radian (3), skirt (0 or 1), and the
+// elevation (1) and gradient (3) the parent patch shows there, for blending between levels.
 // Pure and thread-safe.
 void up_patch_generate(const up_planet *planet, uint32_t level, uint32_t face, uint64_t path,
                        float *out);

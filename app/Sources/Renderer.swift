@@ -25,6 +25,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var simulatedSeconds = 0.0
     /// Whether to draw the mesh's edges over the surface.
     var showMesh = false
+    /// Whether patches blend toward their parent's shape as they near the split, so levels
+    /// change without popping.
+    var blendLevels = true
 
     /// Percent; 100 is real time and 0 is paused.
     var timeSpeed = 360_000.0 {
@@ -40,6 +43,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         var sun: SIMD4<Float>
         var elevation: SIMD4<Float>
         var display: SIMD4<Float>
+        var camera: SIMD4<Float>
+        var lod: SIMD4<Float>
     }
 
     init?(planet: Planet) {
@@ -83,6 +88,8 @@ final class Renderer: NSObject, MTKViewDelegate {
             keys.insert(key)
         case "m":
             if !repeated { showMesh.toggle() }
+        case "b":
+            if !repeated { blendLevels.toggle() }
         case ",":
             if !repeated { timeSpeed = timeSpeed > 1 ? max(timeSpeed / 10, 1) : 0 }
         case ".":
@@ -119,7 +126,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         return String(
             format: "seed %@ · time %@%% · day %.2f · altitude %.0f km · patches %d drawn, %d cached\n"
                 + "drag: look · wheel: zoom · W/S: forward/back · A/D: left/right · R/F: up/down · "
-                + "Q/E: roll · shift: faster · M: mesh · ,/.: time slower/faster",
+                + "Q/E: roll · shift: faster · M: mesh · B: blend · ,/.: time slower/faster",
             planet.parameters.seed,
             timeSpeed.formatted(.number.precision(.fractionLength(0))),
             days,
@@ -232,16 +239,19 @@ final class Renderer: NSObject, MTKViewDelegate {
         let projection = simd_float4x4(perspectiveFovY: fovY, aspect: aspect, near: max(altitude * 0.5, 1e-6))
         let view = simd_float4x4(orientation.inverse) * simd_float4x4(translation: -position)
         let viewProjection = projection * view
+        let pixelsPerRadian = viewportHeight / (2 * tan(fovY / 2))
         var uniforms = Uniforms(
             viewProjection: viewProjection,
             sun: SIMD4(planet.sunDirection(at: simulatedSeconds), 0),
             elevation: SIMD4(planet.minElevation, planet.seaLevel, planet.maxElevation, 0),
-            display: SIMD4(scale, 0, 0, 0)
+            display: SIMD4(scale, 0, 0, 0),
+            camera: SIMD4(position, 0),
+            lod: SIMD4(pixelsPerRadian, patches.targetPixels, blendLevels ? 1 : 0, 0.5)
         )
         let visible = patches.select(PatchView(
             camera: position,
             planes: Renderer.frustumPlanes(viewProjection),
-            pixelsPerRadian: viewportHeight / (2 * tan(fovY / 2))
+            pixelsPerRadian: pixelsPerRadian
         ))
 
         encoder.setRenderPipelineState(pipeline)
@@ -264,9 +274,9 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     private func draw(_ visible: [Patch], _ encoder: MTLRenderCommandEncoder, indexCount: Int) {
         for patch in visible {
-            var skirtDepth = patch.skirtDepth
+            var constants = SIMD2(patch.skirtDepth, patch.parentEdge)
             encoder.setVertexBuffer(patch.buffer, offset: 0, index: 0)
-            encoder.setVertexBytes(&skirtDepth, length: MemoryLayout<Float>.stride, index: 2)
+            encoder.setVertexBytes(&constants, length: MemoryLayout<SIMD2<Float>>.stride, index: 2)
             encoder.drawIndexedPrimitives(
                 type: .triangle,
                 indexCount: indexCount,

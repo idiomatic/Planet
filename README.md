@@ -13,7 +13,7 @@ zig build run   # build and launch
 zig build test  # core tests
 ```
 
-Enter a seed (any text, such as `perihelion`) on the panel and choose Generate. Drag to look; scroll to zoom; W/S, A/D, and R/F fly; Q/E roll; Shift goes faster; M shows the mesh; `,` and `.` slow and speed time. The globe button starts a new planet.
+Enter a seed (any text, such as `perihelion`) on the panel and choose Generate. Drag to look; scroll to zoom; W/S, A/D, and R/F fly; Q/E roll; Shift goes faster; M shows the mesh; B toggles LOD blending; `,` and `.` slow and speed time. The globe button starts a new planet.
 
 Command-line switches skip the panel and open straight to a planet; `--help` lists them:
 
@@ -51,7 +51,15 @@ The elevation is a placeholder (warped fractal noise) until tectonics lands.
 | Frame without generation (CPU+GPU) | 0.85 ms | 1.08 ms |
 | GPU frame | 0.67 ms | 0.84 ms |
 
-Peak memory is 107 MB: the coarse mesh (11 MB), 4,096 cached patches (6.4 KB each, 26 MB), and the render targets. The path's working set (7,752 patches) exceeds the cache's 4,096, so the warm pass regenerates nearly as much as the cold one; within a frame, though, only about 2% of patches are new. Benchmarks generate synchronously, so their mean frame time includes generation; the app generates on background threads and keeps drawing the parent meanwhile.
+Peak memory is 119 MB: the coarse mesh (11 MB), 4,096 cached patches (9.6 KB each, 39 MB), and the render targets. The path's working set (7,752 patches) exceeds the cache's 4,096, so the warm pass regenerates nearly as much as the cold one; within a frame, though, only about 2% of patches are new. Benchmarks generate synchronously, so their mean frame time includes generation; the app generates on background threads and keeps drawing the parent meanwhile.
+
+LOD blending costs no measurable GPU time (0.616 vs. 0.612 ms per frame) and 16 bytes per vertex for the parent's values. To measure popping, 80 snapshots approaching the highest peak (30× relief, 640×400) were compared frame to frame; a pop is a frame whose change departs from the average of its neighbors' by more than 0.2 (on a 0–255 scale):
+
+| Blending | Pops | Largest jump | Mean jump |
+| --- | ---: | ---: | ---: |
+| Off | 12 | 0.35 | 0.092 |
+| Ending at 2× the threshold | 9 | 0.60 | 0.086 |
+| Ending at 1.5× (default) | 0 | 0.15 | 0.034 |
 
 Before patches, the renderer drew the whole coarse mesh at once, which grew 4× per level: level 9 (2.6 million vertices) took 5.1 ms of GPU per frame and 1.2 GB peak, and level 10 took 15.7 ms and 4.0 GB, while the core kept about 266 bytes per vertex where about 48 are needed (its arena keeps generation leftovers). Patches reach level 12 detail near the camera for far less.
 

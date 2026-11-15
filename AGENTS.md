@@ -42,7 +42,7 @@ Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usa
 
 * simplified flight controls: drag to look; the scroll wheel or trackpad zooms along the view direction, by a fraction of the altitude; W/S, A/D, and R/F move; Q/E roll; Shift is faster; speed scales with altitude; the camera stays above the terrain
 * time speed (%, default 360,000%, i.e., an hour per second; 0 pauses): `,` and `.` divide and multiply it by 10, stepping between 1% and 0
-* M (or `--mesh on`) toggles drawing the mesh's edges over the surface
+* M (or `--mesh on`) toggles drawing the mesh's edges over the surface; B (or `--lod-blend off`) toggles LOD blending
 * a status line shows seed, time speed, elapsed days, and altitude, with the controls
 * no save or export; the seed and parameters reproduce a planet
 * command-line switches set the parameters, initial camera, and controls (time speed), skip the panel, and generate at launch; every switch takes a value, since AppKit opens a bare argument as a file and then shows no window (defined in [app/Sources/LaunchOptions.swift](app/Sources/LaunchOptions.swift))
@@ -58,9 +58,10 @@ Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usa
 ## Patches (view-dependent rendering)
 
 * the renderer draws patches, not the coarse mesh: a patch is an icosphere triangle named by level (0–8), base face, and path, drawn as 4 more levels (a 256-triangle lattice), so the finest reach level 12 (~1.6 km)
-* the core generates a patch as a pure, thread-safe function of the planet's parameters and its name (`up_patch_generate`), with the coarse mesh's midpoint normalizations, so shared vertices agree bit for bit; each vertex carries direction, elevation, tangential elevation gradient (fixed-step central differences, so seams shade alike), and a skirt flag
+* the core generates a patch as a pure, thread-safe function of the planet's parameters and its name (`up_patch_generate`), with the coarse mesh's midpoint normalizations, so shared vertices agree bit for bit; each vertex carries direction, elevation, tangential elevation gradient (fixed-step central differences, so seams shade alike), a skirt flag, and the elevation and gradient the parent patch shows there (its own at points the parent shares; the average of the parent edge's ends at edge midpoints)
 * each frame, selection starts at the 20 base faces, culls patches outside the frustum or behind the horizon, and refines a patch into its 4 children while its triangles would exceed 12 pixels
 * patches are cached between frames (least recently used beyond 4,096 are evicted); missing ones are generated on background threads while their parent is drawn; snapshots and benchmarks generate synchronously
+* LOD blending (geomorphing): the vertex shader blends each vertex from the parent's values to its own as the parent's triangles grow on screen from the split threshold to 1.5× it, so a patch matches its parent when it appears and is fully its own across the whole patch before it splits (ending at 2× pops, since a patch's far side lies ~15% farther than its near side); B or `--lod-blend on|off` toggles it (default on)
 * skirts hang below patch edges to hide cracks where levels meet
 * the vertex shader displaces radially by elevation × exaggeration (oceans flat at sea level) and derives normals from the gradient
 * the status line shows patches drawn and cached; `--benchmark` reports patches drawn, visited, and generated per frame, and the cache hit rate

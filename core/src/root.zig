@@ -182,8 +182,9 @@ pub const patch_vertices = patch_surface_vertices + patch_skirt_vertices;
 pub const patch_surface_indices = 3 * patch_n * patch_n;
 pub const patch_indices = patch_surface_indices + 3 * 6 * patch_n;
 /// Floats per patch vertex: direction (3), elevation in meters, tangential elevation gradient
-/// in meters per radian (3), and skirt (0 on the surface, 1 on the skirt's lower edge).
-pub const patch_vertex_floats = 8;
+/// in meters per radian (3), skirt (0 on the surface, 1 on the skirt's lower edge), and the
+/// elevation (1) and gradient (3) the parent patch shows there, for blending between levels.
+pub const patch_vertex_floats = 12;
 
 /// Lattice point (i, j), with i + j ≤ n, at corner a + i/n·(b − a) + j/n·(c − a).
 fn latticeIndex(i: usize, j: usize) usize {
@@ -225,23 +226,22 @@ fn patchPoints(level: u5, face: u5, path: u64) [patch_surface_vertices]Vec {
         while (j <= patch_n) : (j += step) {
             var i: usize = 0;
             while (i + j <= patch_n) : (i += step) {
-                const odd_i = (i / step) % 2 == 1;
-                const odd_j = (j / step) % 2 == 1;
-                if (!odd_i and !odd_j) continue;
-                const ends: [2][2]usize = if (odd_i and odd_j)
-                    .{ .{ i - step, j + step }, .{ i + step, j - step } }
-                else if (odd_i)
-                    .{ .{ i - step, j }, .{ i + step, j } }
-                else
-                    .{ .{ i, j - step }, .{ i, j + step } };
-                points[latticeIndex(i, j)] = midpointOf(
-                    points[latticeIndex(ends[0][0], ends[0][1])],
-                    points[latticeIndex(ends[1][0], ends[1][1])],
-                );
+                const ends = edgeEnds(i, j, step) orelse continue;
+                points[latticeIndex(i, j)] = midpointOf(points[ends[0]], points[ends[1]]);
             }
         }
     }
     return points;
+}
+
+/// For a lattice point that's the midpoint of an edge at spacing 2·`step`, that edge's ends.
+fn edgeEnds(i: usize, j: usize, step: usize) ?[2]usize {
+    const odd_i = (i / step) % 2 == 1;
+    const odd_j = (j / step) % 2 == 1;
+    if (odd_i and odd_j) return .{ latticeIndex(i - step, j + step), latticeIndex(i + step, j - step) };
+    if (odd_i) return .{ latticeIndex(i - step, j), latticeIndex(i + step, j) };
+    if (odd_j) return .{ latticeIndex(i, j - step), latticeIndex(i, j + step) };
+    return null;
 }
 
 /// Writes a patch's vertices (`patch_vertices` × `patch_vertex_floats`): the surface lattice,
@@ -249,6 +249,19 @@ fn patchPoints(level: u5, face: u5, path: u64) [patch_surface_vertices]Vec {
 pub fn generatePatch(p: Params, level: u5, face: u5, path: u64, out: []f32) void {
     const points = patchPoints(level, face, path);
     for (points, 0..) |point, v| writePatchVertex(p, point, 0, out[v * patch_vertex_floats ..]);
+
+    // The parent's lattice is this one's at spacing 2, with the same triangles, so the parent
+    // shows a point it shares as is, and an edge midpoint as the average of the edge's ends.
+    const f = patch_vertex_floats;
+    for (0..patch_surface_vertices) |v| @memcpy(out[v * f + 8 ..][0..4], out[v * f + 3 ..][0..4]);
+    for (0..patch_n + 1) |j| {
+        for (0..patch_n + 1 - j) |i| {
+            const ends = edgeEnds(i, j, 1) orelse continue;
+            const v = latticeIndex(i, j);
+            for (0..4) |k| out[v * f + 8 + k] = (out[ends[0] * f + 3 + k] + out[ends[1] * f + 3 + k]) / 2;
+        }
+    }
+
     for (patchEdges(), 0..) |surface, s| {
         const from = out[surface * patch_vertex_floats ..][0..patch_vertex_floats];
         const to = out[(patch_surface_vertices + s) * patch_vertex_floats ..][0..patch_vertex_floats];
@@ -601,12 +614,32 @@ test "sibling patches agree bit for bit along shared edges" {
             shared += 1;
             try std.testing.expectEqualSlices(
                 f32,
-                a[u * patch_vertex_floats ..][0..7],
-                b[v * patch_vertex_floats ..][0..7],
+                a[u * patch_vertex_floats ..][0..patch_vertex_floats],
+                b[v * patch_vertex_floats ..][0..patch_vertex_floats],
             );
         }
     }
     try std.testing.expectEqual(@as(usize, patch_n + 1), shared);
+}
+
+test "a child's parent values match the parent wherever they share a point" {
+    const f = patch_vertex_floats;
+    var parent: [patch_vertices * f]f32 = undefined;
+    var child: [patch_vertices * f]f32 = undefined;
+    generatePatch(earth, 2, 4, 0b10_01, &parent);
+    for (0..4) |c| {
+        generatePatch(earth, 3, 4, 0b10_01 * 4 + c, &child);
+        var shared: usize = 0;
+        for (0..patch_surface_vertices) |v| {
+            for (0..patch_surface_vertices) |u| {
+                if (!std.mem.eql(f32, &patchPosition(&child, v), &patchPosition(&parent, u))) continue;
+                shared += 1;
+                try std.testing.expectEqualSlices(f32, parent[u * f + 3 ..][0..4], child[v * f + 8 ..][0..4]);
+            }
+        }
+        // The child's even lattice points: (n/2 + 1)(n/2 + 2)/2 of them.
+        try std.testing.expectEqual(@as(usize, (patch_n / 2 + 1) * (patch_n / 2 + 2) / 2), shared);
+    }
 }
 
 test "patch indices stay in range" {
