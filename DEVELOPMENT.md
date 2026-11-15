@@ -4,6 +4,11 @@
 
 * stages run in order: orbit → tectonics → terrain → air → climate → hydrology → biome
 * everything is generated once and static, except human-scale phenomena (e.g., day/night, seasons, weather), which change while time runs
+* functional at stage boundaries: each stage is a pure function of its upstream outputs and its own parameters, returning new immutable output in its own arena; internals may be imperative (e.g., hydrology's fills and flow accumulation)
+* each stage declares the parameters it reads, so a change reruns only that stage and its downstream
+* time-varying phenomena are pure functions of the static world and time, not integrated state, so what's shown at a given time is independent of time-speed history and frame rate, and time can be scrubbed; weather is procedural noise advected by prevailing winds, with time as a noise coordinate (no emergent storm dynamics)
+* parallel work uses a fixed partitioning and reduction order, so floating-point results don't depend on thread scheduling
+* a stage's temporaries (e.g., the mesh's midpoint map and f64 points) live in a scratch arena freed when it returns; only outputs stay (the core keeps ~266 B/vertex today, where ~48 are needed)
 
 ## Mesh
 
