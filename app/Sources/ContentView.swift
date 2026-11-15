@@ -41,6 +41,7 @@ struct ContentView: View {
             if let speed = options.timeSpeed { renderer.timeSpeed = speed }
             renderer.showMesh = options.showMesh
             renderer.blendLevels = options.blendLevels
+            renderer.showAtmosphere = options.showAtmosphere
         }
     }
 

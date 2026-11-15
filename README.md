@@ -17,7 +17,7 @@ zig build run   # build and launch
 zig build test  # core tests
 ```
 
-Enter a seed (any text, such as `perihelion`) on the panel and choose Generate. Drag to look; scroll to zoom; W/S, A/D, and R/F fly; Q/E roll; Shift goes faster; M shows the mesh; B toggles LOD blending; `,` and `.` slow and speed time. The globe button starts a new planet.
+Enter a seed (any text, such as `perihelion`) on the panel and choose Generate. Drag to look; scroll to zoom; W/S, A/D, and R/F fly; Q/E roll; Shift goes faster; M shows the mesh; B toggles LOD blending; H toggles the atmosphere; `,` and `.` slow and speed time. The globe button starts a new planet.
 
 Command-line switches skip the panel and open straight to a planet; `--help` lists them:
 
@@ -86,6 +86,8 @@ CPU use was cut by drawing only when something changes and by computing the elev
 | Flying | ~19% | 11–23% |
 
 Flying still draws at up to 120 fps and generates patches; the rest of its cost is noise, which midpoint displacement (planned) would mostly replace.
+
+The figures above predate the atmosphere. With it, the GPU frame rises from about 0.68 to 4.7 ms on the same path (frames from the cache: 1.0 to 3.2–4.5 ms, CPU and GPU), mostly the per-pixel raymarch (12 view steps × 6 sun steps for terrain, 32 × 6 for the sky). A precomputed transmittance table would remove most of the sun steps.
 
 LOD blending costs no measurable GPU time (0.616 vs. 0.612 ms per frame) and 16 bytes per vertex for the parent's values. To measure popping, 80 snapshots approaching the highest peak (30× relief, 640×400) were compared frame to frame; a pop is a frame whose change departs from the average of its neighbors' by more than 0.2 (on a 0–255 scale):
 

@@ -52,6 +52,10 @@ final class Renderer: NSObject, MTKViewDelegate {
     var blendLevels = true {
         didSet { setNeedsRedraw() }
     }
+    /// Whether to draw the atmosphere: sky, haze, and sunlight through the air.
+    var showAtmosphere = true {
+        didSet { setNeedsRedraw() }
+    }
 
     /// Percent; 100 is real time and 0 is paused.
     var timeSpeed = 360_000.0 {
@@ -67,12 +71,21 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     private struct Uniforms {
         var viewProjection: simd_float4x4
+        var inverseViewProjection: simd_float4x4
         var sun: SIMD4<Float>
         var elevation: SIMD4<Float>
         var display: SIMD4<Float>
         var camera: SIMD4<Float>
         var lod: SIMD4<Float>
+        var atmosphere: SIMD4<Float>
     }
+
+    /// The air's thickness above sea level, in meters, and the exposure for its tone mapping.
+    private static let atmosphereHeight: Float = 60_000
+    private static let exposure: Float = 0.45
+
+    private let skyPipeline: MTLRenderPipelineState
+    private let skyDepthState: MTLDepthStencilState
 
     init?(planet: Planet) {
         guard let device = MTLCreateSystemDefaultDevice(),
@@ -92,6 +105,19 @@ final class Renderer: NSObject, MTKViewDelegate {
         depth.isDepthWriteEnabled = true
         guard let depthState = device.makeDepthStencilState(descriptor: depth) else { return nil }
 
+        // The sky draws at the far plane (depth 0, reverse-Z), only where nothing nearer is.
+        let sky = MTLRenderPipelineDescriptor()
+        sky.vertexFunction = library.makeFunction(name: "skyVertex")
+        sky.fragmentFunction = library.makeFunction(name: "skyFragment")
+        sky.colorAttachments[0].pixelFormat = .bgra8Unorm_srgb
+        sky.depthAttachmentPixelFormat = .depth32Float
+        let skyDepth = MTLDepthStencilDescriptor()
+        skyDepth.depthCompareFunction = .greaterEqual
+        skyDepth.isDepthWriteEnabled = false
+        guard let skyPipeline = try? device.makeRenderPipelineState(descriptor: sky),
+              let skyDepthState = device.makeDepthStencilState(descriptor: skyDepth)
+        else { return nil }
+
         let scale = Float(planet.parameters.radialExaggeration / 100 / planet.radius)
         guard let patches = PatchCache(planet: planet, device: device, scale: scale) else { return nil }
 
@@ -100,6 +126,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         self.queue = queue
         self.pipeline = pipeline
         self.depthState = depthState
+        self.skyPipeline = skyPipeline
+        self.skyDepthState = skyDepthState
         self.patches = patches
         self.scale = scale
         // Above the highest point, with a margin for detail finer than the coarse mesh.
@@ -138,6 +166,8 @@ final class Renderer: NSObject, MTKViewDelegate {
             if !repeated { showMesh.toggle() }
         case "b":
             if !repeated { blendLevels.toggle() }
+        case "h":
+            if !repeated { showAtmosphere.toggle() }
         case ",":
             if !repeated { timeSpeed = timeSpeed > 1 ? max(timeSpeed / 10, 1) : 0 }
         case ".":
@@ -176,7 +206,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         return String(
             format: "seed %@ · time %@%% · day %.2f · altitude %.0f km · patches %d drawn, %d cached\n"
                 + "drag: look · wheel: zoom · W/S: forward/back · A/D: left/right · R/F: up/down · "
-                + "Q/E: roll · shift: faster · M: mesh · B: blend · ,/.: time slower/faster",
+                + "Q/E: roll · shift: faster · M: mesh · B: blend · H: haze · ,/.: time",
             planet.parameters.seed,
             timeSpeed.formatted(.number.precision(.fractionLength(0))),
             days,
@@ -301,11 +331,16 @@ final class Renderer: NSObject, MTKViewDelegate {
         let pixelsPerRadian = viewportHeight / (2 * tan(fovY / 2))
         var uniforms = Uniforms(
             viewProjection: viewProjection,
+            inverseViewProjection: viewProjection.inverse,
             sun: SIMD4(planet.sunDirection(at: simulatedSeconds), 0),
             elevation: SIMD4(planet.minElevation, planet.seaLevel, planet.maxElevation, 0),
             display: SIMD4(scale, 0, 0, 0),
             camera: SIMD4(position, 0),
-            lod: SIMD4(pixelsPerRadian, patches.targetPixels, blendLevels ? 1 : 0, 0.5)
+            lod: SIMD4(pixelsPerRadian, patches.targetPixels, blendLevels ? 1 : 0, 0.5),
+            // The air sees a planet of radius 1 / scale meters, so its thickness keeps its
+            // proportion to the exaggerated relief.
+            atmosphere: SIMD4(
+                showAtmosphere ? 1 : 0, 1 / scale, 1 + Renderer.atmosphereHeight * scale, Renderer.exposure)
         )
         let visible = patches.select(PatchView(
             camera: position,
@@ -327,6 +362,16 @@ final class Renderer: NSObject, MTKViewDelegate {
             encoder.setTriangleFillMode(.lines)
             encoder.setDepthBias(0, slopeScale: 1, clamp: 0)
             draw(visible, encoder, indexCount: patches.surfaceIndexCount)
+        }
+
+        if showAtmosphere {
+            uniforms.elevation.w = 0
+            encoder.setTriangleFillMode(.fill)
+            encoder.setDepthBias(0, slopeScale: 0, clamp: 0)
+            encoder.setRenderPipelineState(skyPipeline)
+            encoder.setDepthStencilState(skyDepthState)
+            encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
+            encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
         }
         encoder.endEncoding()
     }

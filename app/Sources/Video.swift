@@ -26,6 +26,7 @@ enum Video {
         renderer.patches.synchronous = true
         renderer.showMesh = options.showMesh
         renderer.blendLevels = options.blendLevels
+        renderer.showAtmosphere = options.showAtmosphere
 
         let targetDescriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)

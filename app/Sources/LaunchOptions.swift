@@ -37,6 +37,8 @@ struct LaunchOptions {
           --time-speed <%>       100 is real time, 0 pauses (default 360000)
           --mesh <on|off>        draw the mesh's edges (default off; M toggles)
           --lod-blend <on|off>   blend between levels of detail (default on; B toggles)
+          --atmosphere <on|off>  draw the sky, haze, and sunlight through the air (default on;
+                                 H toggles)
 
         Snapshot:
           --snapshot <png>       render one frame to a PNG and exit, without a window
@@ -60,7 +62,7 @@ struct LaunchOptions {
     private static let switches: Set = [
         "--seed", "--radius", "--exaggeration", "--region-scale", "--sea-level", "--tilt", "--day",
         "--year", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--mesh",
-        "--lod-blend", "--snapshot",
+        "--lod-blend", "--atmosphere", "--snapshot",
         "--size", "--benchmark", "--video", "--duration", "--fps", "--bitrate",
     ]
 
@@ -81,6 +83,7 @@ struct LaunchOptions {
     var timeSpeed: Double?
     var showMesh = false
     var blendLevels = true
+    var showAtmosphere = true
     var snapshot: String?
     var size = [1280, 800]
     var benchmarkFrames: Int?
@@ -125,6 +128,7 @@ struct LaunchOptions {
         timeSpeed = value("--time-speed").flatMap(Double.init)
         showMesh = value("--mesh") == "on"
         blendLevels = value("--lod-blend") != "off"
+        showAtmosphere = value("--atmosphere") != "off"
         snapshot = value("--snapshot")
         benchmarkFrames = value("--benchmark").flatMap(Int.init).map { max($0, 1) }
         video = value("--video")

@@ -42,7 +42,7 @@ Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usa
 
 * simplified flight controls: drag to look; the scroll wheel or trackpad zooms along the view direction, by a fraction of the altitude; W/S, A/D, and R/F move; Q/E roll; Shift is faster; speed scales with altitude; the camera stays above the terrain
 * time speed (%, default 360,000%, i.e., an hour per second; 0 pauses): `,` and `.` divide and multiply it by 10, stepping between 1% and 0
-* M (or `--mesh on`) toggles drawing the mesh's edges over the surface; B (or `--lod-blend off`) toggles LOD blending
+* M (or `--mesh on`) toggles drawing the mesh's edges over the surface; B (or `--lod-blend off`) toggles LOD blending; H (or `--atmosphere off`) toggles the atmosphere
 * draws only when something changes: continuously while a movement key is held (up to 120 fps) or time runs (30 fps), otherwise once per change (drag, scroll, toggle, resize, or a newly generated patch); idle with time paused uses no CPU
 * a status line shows seed, time speed, elapsed days, and altitude, with the controls, updating at most 4 times a second while drawing continuously
 * no save or export; the seed and parameters reproduce a planet
@@ -67,6 +67,15 @@ Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usa
 * skirts hang below patch edges to hide cracks where levels meet
 * the vertex shader displaces radially by elevation × exaggeration (oceans flat at sea level) and derives normals from the gradient
 * the status line shows patches drawn and cached; `--benchmark` reports patches drawn, visited, and generated per frame, and the cache hit rate
+
+## Atmosphere
+
+* single scattering, raymarched in the shaders, with Earth's Rayleigh (8 km scale height) and Mie (1.2 km, g = 0.8) coefficients, up to 60 km; sunlight reaching each sample is attenuated through the air (6 steps) and blocked by the planet
+* the air sees a planet whose radius is the true radius divided by the exaggeration, so its thickness keeps its proportion to the exaggerated relief while its vertical optical depth stays Earth's
+* terrain: lit by sunlight through the air, a little skylight while the sun is up, and starlight; then aerial perspective (haze) along the view ray (12 steps)
+* sky: a full-screen pass at the far plane, drawn after the terrain where only the background remains (32 steps), with the sun's disk
+* samples are offset per pixel by interleaved gradient noise, trading banding for fine noise; radiance is tone-mapped (1 − e^(−0.45·L))
+* H (or `--atmosphere on|off`) toggles it (default on); off renders exactly as before
 
 ## Elevation (placeholder until tectonics)
 
