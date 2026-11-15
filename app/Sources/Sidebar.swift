@@ -60,7 +60,7 @@ struct Sidebar: View {
                 VStack(alignment: .leading, spacing: 10) {
                     row("Relief (%)", $settings.values.exaggeration, .logarithmic(10...100_000), earth: ViewValues.earth.exaggeration)
                     row("Sea level (% of elevation range)", $settings.values.seaLevel, .linear(0...100), earth: ViewValues.earth.seaLevel)
-                    row("Air density (× Earth)", $settings.values.airDensity, .logarithmic(0.01...100), earth: ViewValues.earth.airDensity)
+                    row("Air density (× Earth)", $settings.values.airDensity, .logarithmic(0.01...100, zeroAtStart: true), earth: ViewValues.earth.airDensity)
                     row("Axial tilt (°)", $settings.values.axialTilt, .linear(0...90), earth: ViewValues.earth.axialTilt)
                     row("Day length (× Earth)", $settings.values.dayLength, .logarithmic(0.01...100), earth: ViewValues.earth.dayLength)
                     row("Year length (× Earth)", $settings.values.yearLength, .logarithmic(0.01...100), earth: ViewValues.earth.yearLength)
@@ -103,13 +103,15 @@ struct Sidebar: View {
     /// A slider's range and scale. Logarithmic suits ratios; sea level (which includes 0),
     /// tilt (which can be negative), and field of view are linear.
     private enum Scale {
-        case logarithmic(ClosedRange<Double>)
+        /// With `zeroAtStart`, the slider's leftmost position is 0 (e.g., no air), which a
+        /// logarithmic scale can't otherwise reach.
+        case logarithmic(ClosedRange<Double>, zeroAtStart: Bool = false)
         case linear(ClosedRange<Double>)
 
         /// Where `x` falls along the slider, 0...1.
         func fraction(of x: Double) -> Double {
             switch self {
-            case .logarithmic(let r):
+            case .logarithmic(let r, _):
                 return min(max((log10(x) - log10(r.lowerBound)) / (log10(r.upperBound) - log10(r.lowerBound)), 0), 1)
             case .linear(let r):
                 return min(max((x - r.lowerBound) / (r.upperBound - r.lowerBound), 0), 1)
@@ -132,11 +134,13 @@ struct Sidebar: View {
                     .labelsHidden()
             }
             switch scale {
-            case .logarithmic(let range):
+            case .logarithmic(let range, let zeroAtStart):
                 Slider(
                     value: Binding(
                         get: { log10(min(max(value.wrappedValue, range.lowerBound), range.upperBound)) },
-                        set: { value.wrappedValue = Self.rounded(pow(10, $0)) }
+                        set: {
+                            value.wrappedValue = zeroAtStart && $0 <= log10(range.lowerBound) ? 0 : Self.rounded(pow(10, $0))
+                        }
                     ),
                     in: log10(range.lowerBound)...log10(range.upperBound)
                 )

@@ -38,7 +38,7 @@ Live parameters (the View section), which change only the view, so they apply as
 
 * radial exaggeration (%, 1–1,000,000; keys `-` and `=`, four steps of 2^¼ doubling or halving), relative to the planet's own radius: 100% gives Earth's proportions at any size
 * sea level (% of the surface elevation range, from lowest to highest; default 55%)
-* air density (relative to Earth, 0–100; keys `[` and `]`; 0 is no atmosphere): H turns it off and back on to its last nonzero value
+* air density (relative to Earth, 0–100; keys `[` and `]`; 0 is no atmosphere): H turns it off and back on to its last nonzero value; its logarithmic slider (0.01–100) reaches 0 at its leftmost position
 * axial tilt (degrees), day length and year length (relative to Earth): the sun's direction is a pure function of these and time (`pl_sun_direction`)
 * detail (pixels): patches are refined while their triangles exceed it (default 12)
 * exposure (default 0.25) and vertical field of view (degrees, default 60)
