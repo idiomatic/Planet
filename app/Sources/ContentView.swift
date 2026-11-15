@@ -29,7 +29,14 @@ struct ContentView: View {
         }
         .frame(minWidth: 800, minHeight: 500)
         .toolbar {
-            Button("New Planet", systemImage: "globe") { showingPanel = true }
+            Button("New Planet", systemImage: "globe") {
+                // Start from the live parameters as they are now.
+                if let renderer {
+                    parameters.airDensity = renderer.airDensity
+                    parameters.radialExaggeration = renderer.exaggeration
+                }
+                showingPanel = true
+            }
                 .disabled(showingPanel)
         }
         .alert("The planet couldn’t be generated.", isPresented: $failed) {}
@@ -41,7 +48,6 @@ struct ContentView: View {
             if let speed = options.timeSpeed { renderer.timeSpeed = speed }
             renderer.showMesh = options.showMesh
             renderer.blendLevels = options.blendLevels
-            renderer.showAtmosphere = options.showAtmosphere
         }
     }
 

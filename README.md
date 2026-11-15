@@ -17,7 +17,7 @@ zig build run   # build and launch
 zig build test  # core tests
 ```
 
-Enter a seed (any text, such as `perihelion`) on the panel and choose Generate. Drag to look; scroll to zoom; W/S, A/D, and R/F fly; Q/E roll; Shift goes faster; M shows the mesh; B toggles LOD blending; H toggles the atmosphere; `,` and `.` slow and speed time. The globe button starts a new planet.
+Enter a seed (any text, such as `perihelion`) on the panel and choose Generate. Drag to look; scroll to zoom; W/S, A/D, and R/F fly; Q/E roll; Shift goes faster; M shows the mesh; B toggles LOD blending; H turns the air off and on, `[` and `]` adjust its density, and `-` and `=` adjust the relief; `,` and `.` slow and speed time. The globe button starts a new planet.
 
 Command-line switches skip the panel and open straight to a planet; `--help` lists them:
 

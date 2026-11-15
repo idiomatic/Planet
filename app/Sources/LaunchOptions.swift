@@ -19,13 +19,14 @@ struct LaunchOptions {
         Planet:
           --seed <text>          seed; a decimal number is used as is (default hal9000)
           --radius <%>           planet radius, % of Earth (default 100)
-          --exaggeration <%>     radial exaggeration, display only (default 100)
+          --exaggeration <%>     radial exaggeration, display only (default 100; live: -/=)
           --region-scale <n>     region scale, ≥ 1 (default 1)
           --sea-level <%>        sea level, % of the elevation range (default 55)
           --tilt <degrees>       axial tilt (default 23.44)
           --day <× Earth>        day length (default 1)
           --year <× Earth>       year length (default 1)
-          --air <× Earth>        air density, for the atmosphere (default 1; 0 for none)
+          --air <× Earth>        air density, for the atmosphere (default 1; 0 for none;
+                                 live: [/], H turns it off and on)
 
         Camera:
           --direction <x,y,z>    camera direction from the center (default 0,0,1)
@@ -38,8 +39,6 @@ struct LaunchOptions {
           --time-speed <%>       100 is real time, 0 pauses (default 360000)
           --mesh <on|off>        draw the mesh's edges (default off; M toggles)
           --lod-blend <on|off>   blend between levels of detail (default on; B toggles)
-          --atmosphere <on|off>  draw the sky, haze, and sunlight through the air (default on;
-                                 H toggles)
 
         Snapshot:
           --snapshot <png>       render one frame to a PNG and exit, without a window
@@ -63,7 +62,7 @@ struct LaunchOptions {
     private static let switches: Set = [
         "--seed", "--radius", "--exaggeration", "--region-scale", "--sea-level", "--tilt", "--day",
         "--year", "--air", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--mesh",
-        "--lod-blend", "--atmosphere", "--snapshot",
+        "--lod-blend", "--snapshot",
         "--size", "--benchmark", "--video", "--duration", "--fps", "--bitrate",
     ]
 
@@ -84,7 +83,6 @@ struct LaunchOptions {
     var timeSpeed: Double?
     var showMesh = false
     var blendLevels = true
-    var showAtmosphere = true
     var snapshot: String?
     var size = [1280, 800]
     var benchmarkFrames: Int?
@@ -130,7 +128,6 @@ struct LaunchOptions {
         timeSpeed = value("--time-speed").flatMap(Double.init)
         showMesh = value("--mesh") == "on"
         blendLevels = value("--lod-blend") != "off"
-        showAtmosphere = value("--atmosphere") != "off"
         snapshot = value("--snapshot")
         benchmarkFrames = value("--benchmark").flatMap(Int.init).map { max($0, 1) }
         video = value("--video")

@@ -32,9 +32,10 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let depthState: MTLDepthStencilState
     let patches: PatchCache
     /// Radii per meter of elevation, with exaggeration.
-    private let scale: Float
-    /// The camera stays at least this far from the center, in radii.
-    let floorRadius: Float
+    private var scale: Float { Float(exaggeration / 100 / planet.radius) }
+    /// The camera stays at least this far from the center, in radii: above the highest point,
+    /// with a margin for detail finer than the coarse mesh.
+    var floorRadius: Float { 1 + scale * (max(planet.maxElevation, planet.seaLevel) + 500) + 1e-5 }
     private var viewportHeight: Float = 800
 
     private var position = SIMD3<Float>(0, 0, 3)
@@ -52,10 +53,31 @@ final class Renderer: NSObject, MTKViewDelegate {
     var blendLevels = true {
         didSet { setNeedsRedraw() }
     }
-    /// Whether to draw the atmosphere: sky, haze, and sunlight through the air.
-    var showAtmosphere = true {
-        didSet { setNeedsRedraw() }
+
+    // Live parameters: they change only the view, so they can change while flying.
+
+    /// The air's density relative to Earth's; 0 is no atmosphere.
+    var airDensity: Double {
+        didSet {
+            airDensity = min(max(airDensity, 0), 100)
+            if airDensity > 0 { lastAirDensity = airDensity }
+            setNeedsRedraw()
+        }
     }
+    /// The density H restores after turning the air off.
+    private var lastAirDensity: Double
+    /// Radial exaggeration, in percent (display only): refits the cached patches' bounds and
+    /// keeps the camera above the new floor.
+    var exaggeration: Double {
+        didSet {
+            exaggeration = min(max(exaggeration, 1), 1_000_000)
+            patches.scale = scale
+            if length(position) < floorRadius { position = normalize(position) * floorRadius }
+            setNeedsRedraw()
+        }
+    }
+    /// One step of `[` / `]` or `-` / `=`: four steps double or halve.
+    private static let liveStep = pow(2, 0.25)
 
     /// Percent; 100 is real time and 0 is paused.
     var timeSpeed = 360_000.0 {
@@ -120,7 +142,8 @@ final class Renderer: NSObject, MTKViewDelegate {
               let skyDepthState = device.makeDepthStencilState(descriptor: skyDepth)
         else { return nil }
 
-        let scale = Float(planet.parameters.radialExaggeration / 100 / planet.radius)
+        let exaggeration = planet.parameters.radialExaggeration
+        let scale = Float(exaggeration / 100 / planet.radius)
         guard let patches = PatchCache(planet: planet, device: device, scale: scale) else { return nil }
 
         self.device = device
@@ -131,9 +154,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         self.skyPipeline = skyPipeline
         self.skyDepthState = skyDepthState
         self.patches = patches
-        self.scale = scale
-        // Above the highest point, with a margin for detail finer than the coarse mesh.
-        self.floorRadius = 1 + scale * (max(planet.maxElevation, planet.seaLevel) + 500) + 1e-5
+        self.exaggeration = exaggeration
+        self.airDensity = planet.parameters.airDensity
+        self.lastAirDensity = planet.parameters.airDensity > 0 ? planet.parameters.airDensity : 1
         super.init()
         patches.onInstall = { [weak self] in self?.setNeedsRedraw() }
     }
@@ -169,7 +192,15 @@ final class Renderer: NSObject, MTKViewDelegate {
         case "b":
             if !repeated { blendLevels.toggle() }
         case "h":
-            if !repeated { showAtmosphere.toggle() }
+            if !repeated { airDensity = airDensity > 0 ? 0 : lastAirDensity }
+        case "[":
+            airDensity = airDensity > 0 ? airDensity / Renderer.liveStep : 0
+        case "]":
+            airDensity = airDensity > 0 ? airDensity * Renderer.liveStep : 0.01
+        case "-":
+            exaggeration /= Renderer.liveStep
+        case "=":
+            exaggeration *= Renderer.liveStep
         case ",":
             if !repeated { timeSpeed = timeSpeed > 1 ? max(timeSpeed / 10, 1) : 0 }
         case ".":
@@ -206,13 +237,16 @@ final class Renderer: NSObject, MTKViewDelegate {
         let altitude = (length(position) - 1) * Float(planet.radius / 1000)
         let days = simulatedSeconds / (86_400 * planet.parameters.dayLength)
         return String(
-            format: "seed %@ · time %@%% · day %.2f · altitude %.0f km · patches %d drawn, %d cached\n"
+            format: "seed %@ · time %@%% · day %.2f · altitude %.0f km · air %@ · relief %@%% · "
+                + "patches %d drawn, %d cached\n"
                 + "drag: look · wheel: zoom · W/S: forward/back · A/D: left/right · R/F: up/down · "
-                + "Q/E: roll · shift: faster · M: mesh · B: blend · H: haze · ,/.: time",
+                + "Q/E: roll · shift: faster · M: mesh · B: blend · H: air · [/]: air · -/=: relief · ,/.: time",
             planet.parameters.seed,
             timeSpeed.formatted(.number.precision(.fractionLength(0))),
             days,
             altitude,
+            airDensity > 0 ? String(format: "%.2f×", airDensity) : "off",
+            exaggeration.formatted(.number.precision(.significantDigits(3))),
             patches.drawn,
             patches.cachedCount
         )
@@ -340,12 +374,12 @@ final class Renderer: NSObject, MTKViewDelegate {
             sun: SIMD4(planet.sunDirection(at: simulatedSeconds), 0),
             elevation: SIMD4(planet.minElevation, planet.seaLevel, planet.maxElevation, 0),
             display: SIMD4(scale, 0, 0, 0),
-            camera: SIMD4(position, Float(planet.parameters.airDensity)),
+            camera: SIMD4(position, Float(airDensity)),
             lod: SIMD4(pixelsPerRadian, patches.targetPixels, blendLevels ? 1 : 0, 0.5),
             // The air sees a planet of radius 1 / scale meters, so its thickness keeps its
             // proportion to the exaggerated relief.
             atmosphere: SIMD4(
-                showAtmosphere ? 1 : 0, 1 / scale, 1 + Renderer.atmosphereHeight * scale, Renderer.exposure)
+                airDensity > 0 ? 1 : 0, 1 / scale, 1 + Renderer.atmosphereHeight * scale, Renderer.exposure)
         )
         let visible = patches.select(PatchView(
             camera: position,
@@ -369,7 +403,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             draw(visible, encoder, indexCount: patches.surfaceIndexCount)
         }
 
-        if showAtmosphere {
+        if airDensity > 0 {
             uniforms.elevation.w = 0
             encoder.setTriangleFillMode(.fill)
             encoder.setDepthBias(0, slopeScale: 0, clamp: 0)

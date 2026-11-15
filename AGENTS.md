@@ -29,23 +29,28 @@ Procedurally generated Earth-like planet viewer for macOS. Planned features: [DE
 
 Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usable) before generation; defaults are Earth's. Each number has a slider (logarithmic for ratios, rounding to 3 significant digits; linear for sea level, 0–100, and tilt, 0–90°) beside an editable value, which may go beyond the slider's range. A globe button beside the title resets every number to Earth's, keeping the seed, and is disabled when they already are.
 
+Generation parameters, fixed once a planet is generated:
+
 * seed (user-provided text; a decimal number is used as is, other text is hashed with FNV-1a)
 * planet radius scale (% of Earth)
-* radial exaggeration (%, display only)
 * region scale (float ≥ 1, relative to Earth): larger gives fewer, larger regions, up to comically large
 * sea level (% of the surface elevation range, from lowest to highest; default 55%)
 * axial tilt (degrees)
 * day length (relative to Earth)
 * year length (relative to Earth)
-* air density (relative to Earth; 0 for none), used only by the atmosphere so far
+
+Live parameters, which change only the view, so the panel and switches set their starting values and keys adjust them while flying (four steps of 2^¼ double or halve them); reopening the panel shows their current values:
+
+* radial exaggeration (%, 1–1,000,000; `-` and `=`): changing it refits the cached patches' bounds and skirts and keeps the camera above the new floor
+* air density (relative to Earth, 0–100; `[` and `]`; 0 is no atmosphere): H turns it off and back on to its last nonzero value
 
 ## Viewer
 
 * simplified flight controls: drag to look; the scroll wheel or trackpad zooms along the view direction, by a fraction of the altitude; W/S, A/D, and R/F move; Q/E roll; Shift is faster; speed scales with altitude; the camera stays above the terrain
 * time speed (%, default 360,000%, i.e., an hour per second; 0 pauses): `,` and `.` divide and multiply it by 10, stepping between 1% and 0
-* M (or `--mesh on`) toggles drawing the mesh's edges over the surface; B (or `--lod-blend off`) toggles LOD blending; H (or `--atmosphere off`) toggles the atmosphere
+* M (or `--mesh on`) toggles drawing the mesh's edges over the surface; B (or `--lod-blend off`) toggles LOD blending; H turns the air off and on, `[` and `]` adjust its density, and `-` and `=` adjust the relief
 * draws only when something changes: continuously while a movement key is held (up to 120 fps) or time runs (30 fps), otherwise once per change (drag, scroll, toggle, resize, or a newly generated patch); idle with time paused uses no CPU
-* a status line shows seed, time speed, elapsed days, and altitude, with the controls, updating at most 4 times a second while drawing continuously
+* a status line shows seed, time speed, elapsed days, altitude, air density, and relief, with the controls, updating at most 4 times a second while drawing continuously
 * no save or export; the seed and parameters reproduce a planet
 * command-line switches set the parameters, initial camera, and controls (time speed), skip the panel, and generate at launch; every switch takes a value, since AppKit opens a bare argument as a file and then shows no window (defined in [app/Sources/LaunchOptions.swift](app/Sources/LaunchOptions.swift))
 * `--help` or `-h` prints usage and exits; an unknown switch prints usage to stderr and exits with status 2
@@ -76,7 +81,7 @@ Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usa
 * terrain: lit by sunlight through the air, a little skylight while the sun is up, and starlight; then aerial perspective (haze) along the view ray (12 steps)
 * sky: a full-screen pass at the far plane, drawn after the terrain where only the background remains (32 steps), with the sun's disk; view directions come from the camera's basis and field of view, since unprojecting the near plane (~1e-6 radii away near the ground) loses precision and breaks the sky into blocks
 * samples are offset per pixel by interleaved gradient noise, trading banding for fine noise; radiance is tone-mapped (1 − e^(−0.25·L))
-* H (or `--atmosphere on|off`) toggles it (default on); off renders exactly as before
+* air density 0 (`--air 0`, or H) turns it off, rendering exactly as without it
 
 ## Elevation (placeholder until tectonics)
 

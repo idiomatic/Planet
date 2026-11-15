@@ -13,23 +13,43 @@ struct PatchKey: Hashable, Sendable {
     }
 }
 
-/// A generated patch on the GPU, with a bounding sphere in radii.
+/// A generated patch on the GPU, with a bounding sphere in radii. The vertices don't depend on
+/// exaggeration (the shader displaces them), but the bounds and skirt do, so they're refit when
+/// it changes.
 final class Patch {
     let buffer: MTLBuffer
-    let center: SIMD3<Float>
-    let radius: Float
+    let level: UInt32
+    private(set) var center = SIMD3<Float>.zero
+    private(set) var radius: Float = 0
     /// How far the skirt hangs below the surface, in radii.
-    let skirtDepth: Float
+    private(set) var skirtDepth: Float = 0
     /// Edge of the parent's lattice triangles, in radii (0 for a base face, which has no parent).
     let parentEdge: Float
     var lastUsed = 0
 
-    init(buffer: MTLBuffer, center: SIMD3<Float>, radius: Float, skirtDepth: Float, parentEdge: Float) {
+    init(buffer: MTLBuffer, level: UInt32, parentEdge: Float) {
         self.buffer = buffer
-        self.center = center
-        self.radius = radius
-        self.skirtDepth = skirtDepth
+        self.level = level
         self.parentEdge = parentEdge
+    }
+
+    /// Fits the bounds and skirt to `scale` (radii per meter of elevation).
+    func fit(scale: Float, seaLevel: Float, vertexCount: Int, floatsPerVertex: Int, triangleEdge: Float) {
+        let vertices = buffer.contents().bindMemory(to: Float.self, capacity: vertexCount * floatsPerVertex)
+        var lo = SIMD3<Float>(repeating: .infinity)
+        var hi = SIMD3<Float>(repeating: -.infinity)
+        func point(_ v: Int) -> SIMD3<Float> {
+            let f = v * floatsPerVertex
+            return SIMD3(vertices[f], vertices[f + 1], vertices[f + 2]) * (1 + scale * max(vertices[f + 3], seaLevel))
+        }
+        for v in 0..<vertexCount {
+            let p = point(v)
+            lo = simd_min(lo, p)
+            hi = simd_max(hi, p)
+        }
+        center = (lo + hi) / 2
+        radius = (0..<vertexCount).reduce(0) { max($0, length(point($1) - center)) }
+        skirtDepth = triangleEdge + scale * 500
     }
 }
 
@@ -67,8 +87,10 @@ final class PatchCache {
     private let device: MTLDevice
     private let maxLevel: UInt32
     private let vertexCount: Int
-    /// Radii per meter of elevation, with exaggeration.
-    private let scale: Float
+    /// Radii per meter of elevation, with exaggeration; changing it refits every cached patch.
+    var scale: Float {
+        didSet { if scale != oldValue { patches.values.forEach(fit) } }
+    }
     private let seaLevel: Float
     private var patches: [PatchKey: Patch] = [:]
     private var pending: Set<PatchKey> = []
@@ -187,26 +209,17 @@ final class PatchCache {
                   bytes: vertices, length: vertices.count * MemoryLayout<Float>.stride, options: .storageModeShared)
         else { return }
         generatedThisFrame += 1
-
-        var lo = SIMD3<Float>(repeating: .infinity)
-        var hi = SIMD3<Float>(repeating: -.infinity)
-        var points: [SIMD3<Float>] = []
-        points.reserveCapacity(vertexCount)
-        for v in 0..<vertexCount {
-            let f = v * Self.floatsPerVertex
-            let direction = SIMD3(vertices[f], vertices[f + 1], vertices[f + 2])
-            let point = direction * (1 + scale * max(vertices[f + 3], seaLevel))
-            points.append(point)
-            lo = simd_min(lo, point)
-            hi = simd_max(hi, point)
-        }
-        let center = (lo + hi) / 2
-        let radius = points.map { length($0 - center) }.max() ?? 0
-        let skirtDepth = Self.triangleEdge(key.level) + scale * 500
-        let parentEdge = key.level > 0 ? 2 * Self.triangleEdge(key.level) : 0
-        patches[key] = Patch(
-            buffer: buffer, center: center, radius: radius, skirtDepth: skirtDepth, parentEdge: parentEdge)
+        let patch = Patch(
+            buffer: buffer, level: key.level, parentEdge: key.level > 0 ? 2 * Self.triangleEdge(key.level) : 0)
+        fit(patch)
+        patches[key] = patch
         onInstall?()
+    }
+
+    private func fit(_ patch: Patch) {
+        patch.fit(
+            scale: scale, seaLevel: seaLevel, vertexCount: vertexCount,
+            floatsPerVertex: Self.floatsPerVertex, triangleEdge: Self.triangleEdge(patch.level))
     }
 
     private func evict() {

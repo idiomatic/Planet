@@ -22,7 +22,6 @@ enum Benchmark {
         else { fail() }
         renderer.showMesh = options.showMesh
         renderer.blendLevels = options.blendLevels
-        renderer.showAtmosphere = options.showAtmosphere
         renderer.patches.synchronous = true
         let afterRenderer = Memory.now()
 
