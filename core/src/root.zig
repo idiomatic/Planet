@@ -145,7 +145,7 @@ const Mesh = struct {
         const pa = self.points.items[a];
         const pb = self.points.items[b];
         const index: u32 = @intCast(self.points.items.len);
-        try self.addPoint(normalize(.{ pa[0] + pb[0], pa[1] + pb[1], pa[2] + pb[2] }));
+        try self.addPoint(midpointOf(pa, pb));
         entry.value_ptr.* = index;
         return index;
     }
@@ -171,10 +171,174 @@ const Mesh = struct {
     }
 };
 
+/// A patch is a triangle of the subdivided icosahedron, named by level, base face, and path
+/// (one child index, 0...3, per level), drawn as `patch_subdivisions` more levels of triangles.
+pub const patch_subdivisions = 4;
+pub const max_patch_level = 12 - patch_subdivisions;
+const patch_n = 1 << patch_subdivisions; // lattice intervals per patch edge
+const patch_surface_vertices = (patch_n + 1) * (patch_n + 2) / 2;
+const patch_skirt_vertices = 3 * (patch_n + 1);
+pub const patch_vertices = patch_surface_vertices + patch_skirt_vertices;
+pub const patch_surface_indices = 3 * patch_n * patch_n;
+pub const patch_indices = patch_surface_indices + 3 * 6 * patch_n;
+/// Floats per patch vertex: direction (3), elevation in meters, tangential elevation gradient
+/// in meters per radian (3), and skirt (0 on the surface, 1 on the skirt's lower edge).
+pub const patch_vertex_floats = 8;
+
+/// Lattice point (i, j), with i + j ≤ n, at corner a + i/n·(b − a) + j/n·(c − a).
+fn latticeIndex(i: usize, j: usize) usize {
+    return j * (patch_n + 1) - (j * j - j) / 2 + i;
+}
+
+/// The patch's surface positions on the unit sphere, by the same midpoint normalizations as the
+/// coarse mesh, so vertices shared with it or with neighboring patches agree bit for bit.
+fn patchPoints(level: u5, face: u5, path: u64) [patch_surface_vertices]Vec {
+    const f = Mesh.base_faces[face];
+    var a = normalize(Mesh.base_points[f[0]]);
+    var b = normalize(Mesh.base_points[f[1]]);
+    var c = normalize(Mesh.base_points[f[2]]);
+    var depth: u5 = 0;
+    while (depth < level) : (depth += 1) {
+        const child = (path >> (@as(u6, level - 1 - depth) * 2)) & 3;
+        const ab = midpointOf(a, b);
+        const bc = midpointOf(b, c);
+        const ca = midpointOf(c, a);
+        // The same child order as Mesh.subdivide.
+        const next: [3]Vec = switch (child) {
+            0 => .{ a, ab, ca },
+            1 => .{ ab, b, bc },
+            2 => .{ ca, bc, c },
+            else => .{ ab, bc, ca },
+        };
+        a = next[0];
+        b = next[1];
+        c = next[2];
+    }
+
+    var points: [patch_surface_vertices]Vec = undefined;
+    points[latticeIndex(0, 0)] = a;
+    points[latticeIndex(patch_n, 0)] = b;
+    points[latticeIndex(0, patch_n)] = c;
+    var step: usize = patch_n / 2;
+    while (step >= 1) : (step /= 2) {
+        var j: usize = 0;
+        while (j <= patch_n) : (j += step) {
+            var i: usize = 0;
+            while (i + j <= patch_n) : (i += step) {
+                const odd_i = (i / step) % 2 == 1;
+                const odd_j = (j / step) % 2 == 1;
+                if (!odd_i and !odd_j) continue;
+                const ends: [2][2]usize = if (odd_i and odd_j)
+                    .{ .{ i - step, j + step }, .{ i + step, j - step } }
+                else if (odd_i)
+                    .{ .{ i - step, j }, .{ i + step, j } }
+                else
+                    .{ .{ i, j - step }, .{ i, j + step } };
+                points[latticeIndex(i, j)] = midpointOf(
+                    points[latticeIndex(ends[0][0], ends[0][1])],
+                    points[latticeIndex(ends[1][0], ends[1][1])],
+                );
+            }
+        }
+    }
+    return points;
+}
+
+/// Writes a patch's vertices (`patch_vertices` × `patch_vertex_floats`): the surface lattice,
+/// then each edge again as the skirt's lower edge. Pure in (params, level, face, path).
+pub fn generatePatch(p: Params, level: u5, face: u5, path: u64, out: []f32) void {
+    const points = patchPoints(level, face, path);
+    for (points, 0..) |point, v| writePatchVertex(p, point, 0, out[v * patch_vertex_floats ..]);
+    for (patchEdges(), 0..) |surface, s| {
+        const from = out[surface * patch_vertex_floats ..][0..patch_vertex_floats];
+        const to = out[(patch_surface_vertices + s) * patch_vertex_floats ..][0..patch_vertex_floats];
+        to.* = from.*;
+        to[7] = 1;
+    }
+}
+
+fn writePatchVertex(p: Params, point: Vec, skirt: f32, out: []f32) void {
+    // Central differences along a tangent frame, with a step independent of the patch, so a
+    // vertex gets the same gradient from every patch that has it.
+    const h = 1e-5;
+    const t1 = normalize(cross(if (@abs(point[1]) < 0.9) Vec{ 0, 1, 0 } else Vec{ 1, 0, 0 }, point));
+    const t2 = cross(point, t1);
+    const d1 = (elevation(p, axpy(h, t1, point)) - elevation(p, axpy(-h, t1, point))) / (2 * h);
+    const d2 = (elevation(p, axpy(h, t2, point)) - elevation(p, axpy(-h, t2, point))) / (2 * h);
+    const e = elevation(p, point);
+    for (0..3) |k| {
+        out[k] = @floatCast(point[k]);
+        out[4 + k] = @floatCast(d1 * t1[k] + d2 * t2[k]);
+    }
+    out[3] = @floatCast(e);
+    out[7] = skirt;
+}
+
+/// Surface vertex indices along the three edges, in order: a→b, b→c, c→a.
+fn patchEdges() [patch_skirt_vertices]usize {
+    var edges: [patch_skirt_vertices]usize = undefined;
+    for (0..patch_n + 1) |k| {
+        edges[k] = latticeIndex(k, 0);
+        edges[patch_n + 1 + k] = latticeIndex(patch_n - k, k);
+        edges[2 * (patch_n + 1) + k] = latticeIndex(0, patch_n - k);
+    }
+    return edges;
+}
+
+/// Triangle indices shared by every patch: the surface first (`patch_surface_indices`), then
+/// the skirts.
+pub fn patchIndexPattern(out: []u32) void {
+    var n: usize = 0;
+    for (0..patch_n) |j| {
+        for (0..patch_n - j) |i| {
+            for ([3]usize{ latticeIndex(i, j), latticeIndex(i + 1, j), latticeIndex(i, j + 1) }) |v| {
+                out[n] = @intCast(v);
+                n += 1;
+            }
+            if (i + j + 2 <= patch_n) {
+                for ([3]usize{ latticeIndex(i + 1, j), latticeIndex(i + 1, j + 1), latticeIndex(i, j + 1) }) |v| {
+                    out[n] = @intCast(v);
+                    n += 1;
+                }
+            }
+        }
+    }
+    const edges = patchEdges();
+    for (0..3) |e| {
+        for (0..patch_n) |k| {
+            const s = e * (patch_n + 1) + k;
+            const top0 = edges[s];
+            const top1 = edges[s + 1];
+            const low0 = patch_surface_vertices + s;
+            const low1 = low0 + 1;
+            for ([6]usize{ top0, top1, low1, top0, low1, low0 }) |v| {
+                out[n] = @intCast(v);
+                n += 1;
+            }
+        }
+    }
+}
+
+fn midpointOf(a: Vec, b: Vec) Vec {
+    return normalize(.{ a[0] + b[0], a[1] + b[1], a[2] + b[2] });
+}
+
 fn normalize(v: Vec) Vec {
     const n = @sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
     return .{ v[0] / n, v[1] / n, v[2] / n };
 }
+
+fn cross(a: Vec, b: Vec) Vec {
+    return .{ a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] };
+}
+
+fn axpy(s: f64, x: Vec, y: Vec) Vec {
+    return .{ s * x[0] + y[0], s * x[1] + y[1], s * x[2] + y[2] };
+}
+
+/// Octaves of the placeholder elevation: its finest wavelength (~1 km at Earth's radius) suits
+/// the finest patches. Fixed, so a point's elevation doesn't depend on which patch asks.
+const elevation_octaves = 13;
 
 /// Placeholder for tectonics: warped fractal noise, in meters.
 fn elevation(p: Params, point: Vec) f64 {
@@ -185,7 +349,7 @@ fn elevation(p: Params, point: Vec) f64 {
         fbm(p.seed +% 202, q, 4),
         fbm(p.seed +% 303, q, 4),
     };
-    const e = fbm(p.seed, .{ q[0] + warp[0], q[1] + warp[1], q[2] + warp[2] }, 7);
+    const e = fbm(p.seed, .{ q[0] + warp[0], q[1] + warp[1], q[2] + warp[2] }, elevation_octaves);
     return e * elevation_amplitude;
 }
 
@@ -317,6 +481,32 @@ export fn up_planet_max_elevation(handle: *const Handle) f32 {
     return planetOf(handle).max_elevation;
 }
 
+export fn up_patch_max_level() u32 {
+    return max_patch_level;
+}
+
+export fn up_patch_vertex_count() u32 {
+    return patch_vertices;
+}
+
+export fn up_patch_surface_index_count() u32 {
+    return patch_surface_indices;
+}
+
+export fn up_patch_index_count() u32 {
+    return patch_indices;
+}
+
+export fn up_patch_indices(out: [*]u32) void {
+    patchIndexPattern(out[0..patch_indices]);
+}
+
+/// Thread-safe: reads only the planet's immutable parameters.
+export fn up_patch_generate(handle: *const Handle, level: u32, face: u32, path: u64, out: [*]f32) void {
+    const planet = planetOf(handle);
+    generatePatch(planet.params, @intCast(level), @intCast(face), path, out[0 .. patch_vertices * patch_vertex_floats]);
+}
+
 export fn up_planet_sun_direction(handle: *const Handle, seconds: f64, out: *[3]f32) void {
     const s = planetOf(handle).sunDirection(seconds);
     for (0..3) |k| out[k] = @floatCast(s[k]);
@@ -371,6 +561,58 @@ test "sun reaches the tropic at the solstice" {
     defer planet.destroy();
     const s = planet.sunDirection(earth_year / 4);
     try std.testing.expectApproxEqAbs(@sin(std.math.degreesToRadians(23.44)), s[1], 1e-9);
+}
+
+fn patchPosition(out: []const f32, v: usize) [3]f32 {
+    return out[v * patch_vertex_floats ..][0..3].*;
+}
+
+test "patches at the coarse level reproduce the coarse mesh's vertices exactly" {
+    const planet = try Planet.create(std.testing.allocator, earth);
+    defer planet.destroy();
+    var coarse: std.AutoHashMapUnmanaged([3]u32, void) = .empty;
+    defer coarse.deinit(std.testing.allocator);
+    for (0..planet.elevations.len) |v| {
+        try coarse.put(std.testing.allocator, @bitCast(planet.positions[v * 3 ..][0..3].*), {});
+    }
+    const level = coarse_level - patch_subdivisions;
+    var out: [patch_vertices * patch_vertex_floats]f32 = undefined;
+    for (0..20) |face| {
+        for ([_]u64{ 0, 5, (1 << (2 * @as(u6, level))) - 1 }) |path| {
+            generatePatch(earth, level, @intCast(face), path, &out);
+            for (0..patch_surface_vertices) |v| {
+                try std.testing.expect(coarse.contains(@bitCast(patchPosition(&out, v))));
+            }
+        }
+    }
+}
+
+test "sibling patches agree bit for bit along shared edges" {
+    var a: [patch_vertices * patch_vertex_floats]f32 = undefined;
+    var b: [patch_vertices * patch_vertex_floats]f32 = undefined;
+    // Children 0 (a, ab, ca) and 3 (ab, bc, ca) share the edge ab–ca.
+    generatePatch(earth, 3, 7, 0b01_10_00, &a);
+    generatePatch(earth, 3, 7, 0b01_10_11, &b);
+    var shared: usize = 0;
+    for (0..patch_surface_vertices) |u| {
+        for (0..patch_surface_vertices) |v| {
+            const pa = patchPosition(&a, u);
+            if (!std.mem.eql(f32, &pa, &patchPosition(&b, v))) continue;
+            shared += 1;
+            try std.testing.expectEqualSlices(
+                f32,
+                a[u * patch_vertex_floats ..][0..7],
+                b[v * patch_vertex_floats ..][0..7],
+            );
+        }
+    }
+    try std.testing.expectEqual(@as(usize, patch_n + 1), shared);
+}
+
+test "patch indices stay in range" {
+    var indices: [patch_indices]u32 = undefined;
+    patchIndexPattern(&indices);
+    for (indices) |i| try std.testing.expect(i < patch_vertices);
 }
 
 test "seeds from text" {

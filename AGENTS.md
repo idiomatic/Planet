@@ -48,17 +48,26 @@ Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usa
 * command-line switches set the parameters, initial camera, and controls (time speed), skip the panel, and generate at launch; every switch takes a value, since AppKit opens a bare argument as a file and then shows no window (defined in [app/Sources/LaunchOptions.swift](app/Sources/LaunchOptions.swift))
 * `--help` or `-h` prints usage and exits; an unknown switch prints usage to stderr and exits with status 2
 * `--snapshot <png>` instead renders one frame offscreen and exits
-* `--benchmark <frames>` instead renders frames offscreen (no window or vsync, default 2560×1600) from orbit to the surface, prints generation time, frame times, fps, and memory footprint, and exits
+* `--benchmark <frames>` instead renders frames offscreen (no window or vsync, default 2560×1600) from orbit to the surface, twice (cold, then warm from the cache), prints generation time, frame times, fps, patch counts, and memory footprint, and exits
 
 ## Mesh
 
 * icosphere at the coarse level (compile-time parameter, default 6, ~105 km edges), with per-vertex fields stored in the core
 * vertex address: subdivision path (base face, then child index per level) plus corner; a vertex shared by several triangles uses its lowest address, so shared vertices agree
-* rendering displaces vertices radially by elevation × exaggeration, flattening oceans to sea level
+
+## Patches (view-dependent rendering)
+
+* the renderer draws patches, not the coarse mesh: a patch is an icosphere triangle named by level (0–8), base face, and path, drawn as 4 more levels (a 256-triangle lattice), so the finest reach level 12 (~1.6 km)
+* the core generates a patch as a pure, thread-safe function of the planet's parameters and its name (`up_patch_generate`), with the coarse mesh's midpoint normalizations, so shared vertices agree bit for bit; each vertex carries direction, elevation, tangential elevation gradient (fixed-step central differences, so seams shade alike), and a skirt flag
+* each frame, selection starts at the 20 base faces, culls patches outside the frustum or behind the horizon, and refines a patch into its 4 children while its triangles would exceed 12 pixels
+* patches are cached between frames (least recently used beyond 4,096 are evicted); missing ones are generated on background threads while their parent is drawn; snapshots and benchmarks generate synchronously
+* skirts hang below patch edges to hide cracks where levels meet
+* the vertex shader displaces radially by elevation × exaggeration (oceans flat at sea level) and derives normals from the gradient
+* the status line shows patches drawn and cached; `--benchmark` reports patches drawn, visited, and generated per frame, and the cache hit rate
 
 ## Elevation (placeholder until tectonics)
 
-* domain-warped fractal value noise of the seed; region scale divides its base frequency
+* domain-warped fractal value noise of the seed, 13 octaves (finest ~1 km); region scale divides its base frequency
 
 ## Orbit
 

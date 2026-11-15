@@ -41,23 +41,26 @@ The elevation is a placeholder (warped fractal noise) until tectonics lands.
 
 ## Performance
 
-`--benchmark <frames>` renders offscreen from orbit to the surface and reports timings and memory. On an Apple M2 (10-core GPU), release builds (`zig build -Drelease -Dcoarse-level=N`), 300 frames at 2560×1600:
+`--benchmark <frames>` renders offscreen along a path that circles the planet while descending from orbit to the surface, twice (cold, then warm), and reports timings, patch counts, and memory. On an Apple M2 (10-core GPU), a release build (`zig build -Drelease`), 300 frames at 2560×1600, mesh off:
 
-| Level | Vertices | Generation | GPU frame (mesh off / on) | fps, unsynced (off / on) | Peak memory (off / on) |
-| ---: | ---: | ---: | ---: | ---: | ---: |
-| 6 | 40,962 | 22 ms | 0.69 / 0.73 ms | 1,032 / 961 | 63 / 70 MB |
-| 7 | 163,842 | 78 ms | 0.82 / 1.29 ms | 858 / 611 | 121 / 143 MB |
-| 8 | 655,362 | 251 ms | 1.67 / 4.25 ms | 484 / 213 | 338 / 421 MB |
-| 9 | 2,621,442 | 975 ms | 5.13 / 15.4 ms | 167 / 61 | 1.2 / 1.4 GB |
-| 10 | 10,485,762 | 4.1 s | 15.7 / 55.6 ms | 61 / 18 | 4.0 / 4.0 GB |
+| | Cold pass | Warm pass |
+| --- | ---: | ---: |
+| Patches drawn / visited per frame | 574 / 1,056 | 574 / 1,056 |
+| Patches generated | 7,752 (0.26 ms each) | 7,336 |
+| Cache hit rate | 97.6% | 97.7% |
+| Frame without generation (CPU+GPU) | 0.85 ms | 1.08 ms |
+| GPU frame | 0.67 ms | 0.84 ms |
 
-Memory grows about 4× per level, as the vertex count does. Most of it is the core's generation leftovers: it keeps about 266 bytes per vertex (the midpoint map, f64 points, and grown-and-discarded arrays all stay in its arena), where the outputs need about 48. A functional pipeline with per-stage scratch arenas fixes that; its own cost, keeping each stage's output rather than overwriting, is a few bytes per vertex, and it doesn't change frame time, since static stages run once at generation. The mesh overlay costs little at the default level but triples GPU time from level 8 up.
+Peak memory is 107 MB: the coarse mesh (11 MB), 4,096 cached patches (6.4 KB each, 26 MB), and the render targets. The path's working set (7,752 patches) exceeds the cache's 4,096, so the warm pass regenerates nearly as much as the cold one; within a frame, though, only about 2% of patches are new. Benchmarks generate synchronously, so their mean frame time includes generation; the app generates on background threads and keeps drawing the parent meanwhile.
+
+Before patches, the renderer drew the whole coarse mesh at once, which grew 4× per level: level 9 (2.6 million vertices) took 5.1 ms of GPU per frame and 1.2 GB peak, and level 10 took 15.7 ms and 4.0 GB, while the core kept about 266 bytes per vertex where about 48 are needed (its arena keeps generation leftovers). Patches reach level 12 detail near the camera for far less.
 
 ## Design notes
 
 * **Reproducible planets.** Generation is deterministic, so a seed and its parameters fully describe a planet; there's nothing to save or export.
 * **Region scale.** Values above 1 exaggerate regions, simplifying the planet as seen from orbit; below 1 would be absurd in a different way, so it isn't allowed.
-* **Memory.** A full 12-level icosphere has 10·4¹²+2 ≈ 168 million vertices, about 670 MB per 32-bit field, more than an 8 GB M1 can hold across all fields. So only a coarse level is stored globally, and finer levels are generated around the camera.
+* **Memory.** A full 12-level icosphere has 10·4¹²+2 ≈ 168 million vertices, about 670 MB per 32-bit field, more than an 8 GB M1 can hold across all fields. So only a coarse level is stored globally, and finer levels are generated around the camera, as patches.
+* **Patches.** Selection refines by projected triangle size, so detail follows the camera without a fixed radius. A patch's vertices come from the same midpoint normalizations as the coarse mesh and a fixed-step gradient, so neighbors agree exactly where they share vertices; skirts cover the T-junctions where a fine patch meets a coarser one.
 * **Vertex addresses.** A vertex on a shared edge or corner is reachable by several subdivision paths; picking the lowest gives it one detail value, so neighboring triangles don't crack apart.
 * **Detail field.** Hashing (seed, address) alone yields uncorrelated white noise; midpoint displacement with shrinking amplitude turns it into natural-looking terrain.
 * **Time.** Only human-scale phenomena change while time runs; geology is generated once.

@@ -6,12 +6,15 @@ struct Uniforms {
     float4x4 viewProjection;
     float4 sun;        // xyz: unit vector toward the sun
     float4 elevation;  // x: min, y: sea level, z: max (meters); w: 1 when drawing mesh edges
+    float4 display;    // x: radii per meter of elevation, with exaggeration
 };
 
+// A patch vertex, as the core writes it.
 struct Vertex {
-    packed_float3 position;
-    packed_float3 normal;
-    float elevation;
+    packed_float3 direction;
+    float elevation;   // meters
+    packed_float3 gradient; // tangential elevation gradient, meters per radian
+    float skirt;       // 1 on a skirt's lower edge
 };
 
 struct Fragment {
@@ -22,11 +25,17 @@ struct Fragment {
 
 vertex Fragment vertexMain(uint id [[vertex_id]],
                            const device Vertex *vertices [[buffer(0)]],
-                           constant Uniforms &u [[buffer(1)]]) {
+                           constant Uniforms &u [[buffer(1)]],
+                           constant float &skirtDepth [[buffer(2)]]) {
     Vertex v = vertices[id];
+    float3 d = float3(v.direction);
+    float s = u.display.x;
+    float sea = u.elevation.y;
+    // Oceans are flat at sea level; skirts hang below the patch's edges to hide cracks.
+    float r = 1 + s * max(v.elevation, sea) - skirtDepth * v.skirt;
     Fragment out;
-    out.position = u.viewProjection * float4(float3(v.position), 1);
-    out.normal = float3(v.normal);
+    out.position = u.viewProjection * float4(d * r, 1);
+    out.normal = v.elevation < sea ? d : normalize(d * (1 + s * v.elevation) - s * float3(v.gradient));
     out.elevation = v.elevation;
     return out;
 }

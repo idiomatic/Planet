@@ -11,10 +11,11 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let queue: MTLCommandQueue
     private let pipeline: MTLRenderPipelineState
     private let depthState: MTLDepthStencilState
-    private let vertexBuffer: MTLBuffer
-    private let indexBuffer: MTLBuffer
-    private let indexCount: Int
+    let patches: PatchCache
+    /// Radii per meter of elevation, with exaggeration.
+    private let scale: Float
     private let floorRadius: Float
+    private var viewportHeight: Float = 800
 
     private var position = SIMD3<Float>(0, 0, 3)
     private var orientation = simd_quatf(angle: 0, axis: SIMD3(0, 1, 0))
@@ -38,6 +39,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         var viewProjection: simd_float4x4
         var sun: SIMD4<Float>
         var elevation: SIMD4<Float>
+        var display: SIMD4<Float>
     }
 
     init?(planet: Planet) {
@@ -58,65 +60,18 @@ final class Renderer: NSObject, MTKViewDelegate {
         depth.isDepthWriteEnabled = true
         guard let depthState = device.makeDepthStencilState(descriptor: depth) else { return nil }
 
-        let (vertices, top) = Renderer.vertices(for: planet)
-        let indices = planet.indices
-        guard let vertexBuffer = vertices.withUnsafeBytes({
-                  device.makeBuffer(bytes: $0.baseAddress!, length: $0.count, options: .storageModeShared)
-              }),
-              let indexBuffer = device.makeBuffer(
-                  bytes: indices.baseAddress!,
-                  length: indices.count * MemoryLayout<UInt32>.stride,
-                  options: .storageModeShared
-              )
-        else { return nil }
+        let scale = Float(planet.parameters.radialExaggeration / 100 / planet.radius)
+        guard let patches = PatchCache(planet: planet, device: device, scale: scale) else { return nil }
 
         self.device = device
         self.planet = planet
         self.queue = queue
         self.pipeline = pipeline
         self.depthState = depthState
-        self.vertexBuffer = vertexBuffer
-        self.indexBuffer = indexBuffer
-        self.indexCount = indices.count
-        self.floorRadius = top + 1e-5
-    }
-
-    /// Interleaved position, normal, and elevation per vertex, displaced radially with
-    /// oceans flattened to sea level; also returns the highest radius.
-    private static func vertices(for planet: Planet) -> ([Float], Float) {
-        let count = planet.vertexCount
-        let positions = planet.positions
-        let elevations = planet.elevations
-        let sea = planet.seaLevel
-        let scale = Float(planet.parameters.radialExaggeration / 100 / planet.radius)
-
-        var points = [SIMD3<Float>](repeating: .zero, count: count)
-        var top: Float = 1
-        for i in 0..<count {
-            let direction = SIMD3(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2])
-            let r = 1 + max(elevations[i], sea) * scale
-            points[i] = direction * r
-            top = max(top, r)
-        }
-
-        var normals = [SIMD3<Float>](repeating: .zero, count: count)
-        let indices = planet.indices
-        for t in stride(from: 0, to: indices.count, by: 3) {
-            let a = Int(indices[t]), b = Int(indices[t + 1]), c = Int(indices[t + 2])
-            var n = cross(points[b] - points[a], points[c] - points[a])
-            if dot(n, points[a]) < 0 { n = -n }
-            normals[a] += n
-            normals[b] += n
-            normals[c] += n
-        }
-
-        var vertices = [Float]()
-        vertices.reserveCapacity(count * 7)
-        for i in 0..<count {
-            let n = elevations[i] < sea ? normalize(points[i]) : normalize(normals[i])
-            vertices += [points[i].x, points[i].y, points[i].z, n.x, n.y, n.z, elevations[i]]
-        }
-        return (vertices, top)
+        self.patches = patches
+        self.scale = scale
+        // Above the highest point, with a margin for detail finer than the coarse mesh.
+        self.floorRadius = 1 + scale * (max(planet.maxElevation, planet.seaLevel) + 500) + 1e-5
     }
 
     // MARK: Input
@@ -162,20 +117,25 @@ final class Renderer: NSObject, MTKViewDelegate {
         let altitude = (length(position) - 1) * Float(planet.radius / 1000)
         let days = simulatedSeconds / (86_400 * planet.parameters.dayLength)
         return String(
-            format: "seed %@ · time %@%% · day %.2f · altitude %.0f km\n"
+            format: "seed %@ · time %@%% · day %.2f · altitude %.0f km · patches %d drawn, %d cached\n"
                 + "drag: look · wheel: zoom · W/S: forward/back · A/D: left/right · R/F: up/down · "
                 + "Q/E: roll · shift: faster · M: mesh · ,/.: time slower/faster",
             planet.parameters.seed,
             timeSpeed.formatted(.number.precision(.fractionLength(0))),
             days,
-            altitude
+            altitude,
+            patches.drawn,
+            patches.cachedCount
         )
     }
 
     // MARK: MTKViewDelegate
 
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
-        if size.height > 0 { aspect = Float(size.width / size.height) }
+        if size.height > 0 {
+            aspect = Float(size.width / size.height)
+            viewportHeight = Float(size.height)
+        }
     }
 
     func draw(in view: MTKView) {
@@ -239,6 +199,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// A render pass with offscreen color and depth targets, and the aspect set to match.
     func offscreenPass(width: Int, height: Int) -> MTLRenderPassDescriptor? {
         aspect = Float(width) / Float(height)
+        viewportHeight = Float(height)
 
         let colorDescriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .bgra8Unorm_srgb, width: width, height: height, mipmapped: false)
@@ -267,41 +228,61 @@ final class Renderer: NSObject, MTKViewDelegate {
     private func encode(_ commands: MTLCommandBuffer, _ pass: MTLRenderPassDescriptor) {
         guard let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
         let altitude = length(position) - floorRadius
-        let projection = simd_float4x4(perspectiveFovY: .pi / 3, aspect: aspect, near: max(altitude * 0.5, 1e-6))
+        let fovY: Float = .pi / 3
+        let projection = simd_float4x4(perspectiveFovY: fovY, aspect: aspect, near: max(altitude * 0.5, 1e-6))
         let view = simd_float4x4(orientation.inverse) * simd_float4x4(translation: -position)
+        let viewProjection = projection * view
         var uniforms = Uniforms(
-            viewProjection: projection * view,
+            viewProjection: viewProjection,
             sun: SIMD4(planet.sunDirection(at: simulatedSeconds), 0),
-            elevation: SIMD4(planet.minElevation, planet.seaLevel, planet.maxElevation, 0)
+            elevation: SIMD4(planet.minElevation, planet.seaLevel, planet.maxElevation, 0),
+            display: SIMD4(scale, 0, 0, 0)
         )
+        let visible = patches.select(PatchView(
+            camera: position,
+            planes: Renderer.frustumPlanes(viewProjection),
+            pixelsPerRadian: viewportHeight / (2 * tan(fovY / 2))
+        ))
 
         encoder.setRenderPipelineState(pipeline)
         encoder.setDepthStencilState(depthState)
-        encoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
         encoder.setVertexBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
         encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
-        drawTriangles(encoder)
+        draw(visible, encoder, indexCount: patches.indexCount)
 
         if showMesh {
-            // Edges again as lines, pulled toward the camera (reverse-Z: greater is nearer).
+            // Surface edges again as lines, pulled toward the camera (reverse-Z: greater is nearer).
             uniforms.elevation.w = 1
             encoder.setVertexBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
             encoder.setFragmentBytes(&uniforms, length: MemoryLayout<Uniforms>.stride, index: 1)
             encoder.setTriangleFillMode(.lines)
             encoder.setDepthBias(0, slopeScale: 1, clamp: 0)
-            drawTriangles(encoder)
+            draw(visible, encoder, indexCount: patches.surfaceIndexCount)
         }
         encoder.endEncoding()
     }
 
-    private func drawTriangles(_ encoder: MTLRenderCommandEncoder) {
-        encoder.drawIndexedPrimitives(
-            type: .triangle,
-            indexCount: indexCount,
-            indexType: .uint32,
-            indexBuffer: indexBuffer,
-            indexBufferOffset: 0
-        )
+    private func draw(_ visible: [Patch], _ encoder: MTLRenderCommandEncoder, indexCount: Int) {
+        for patch in visible {
+            var skirtDepth = patch.skirtDepth
+            encoder.setVertexBuffer(patch.buffer, offset: 0, index: 0)
+            encoder.setVertexBytes(&skirtDepth, length: MemoryLayout<Float>.stride, index: 2)
+            encoder.drawIndexedPrimitives(
+                type: .triangle,
+                indexCount: indexCount,
+                indexType: .uint32,
+                indexBuffer: patches.indexBuffer,
+                indexBufferOffset: 0
+            )
+        }
+    }
+
+    /// Left, right, bottom, top, and near planes of `m`'s frustum, pointing inward and
+    /// normalized (reverse-Z with an infinite far plane has no far plane).
+    private static func frustumPlanes(_ m: simd_float4x4) -> [SIMD4<Float>] {
+        func row(_ r: Int) -> SIMD4<Float> { SIMD4(m[0][r], m[1][r], m[2][r], m[3][r]) }
+        let (r0, r1, r2, r3) = (row(0), row(1), row(2), row(3))
+        return [r3 + r0, r3 - r0, r3 + r1, r3 - r1, r3 - r2].map { $0 / length(SIMD3($0.x, $0.y, $0.z)) }
     }
 
     /// Moves at a speed proportional to altitude, so approaching the surface slows down.

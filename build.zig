@@ -9,6 +9,7 @@ const swift_sources = [_][]const u8{
     "app/Sources/LaunchOptions.swift",
     "app/Sources/Math.swift",
     "app/Sources/ParameterPanel.swift",
+    "app/Sources/PatchCache.swift",
     "app/Sources/Planet.swift",
     "app/Sources/Renderer.swift",
     "app/Sources/Shaders.swift",

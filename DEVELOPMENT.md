@@ -12,11 +12,9 @@
 
 ## Mesh
 
-* icosphere, 12 subdivision levels (~1.6 km edges at Earth radius)
-* finer levels than the coarse one are generated on demand around the camera as it travels, and evicted behind it
-* detail field: a deterministic function of (seed, vertex address), independent of the camera's path, that feeds fine terrain
+* detail field: a deterministic function of (seed, vertex address), independent of the camera's path, that feeds fine terrain (patches now get fine detail from the placeholder's extra noise octaves instead)
 * the detail field is applied as midpoint displacement, since raw hashes are white noise: each new vertex starts at the average of its parent edge's endpoints, offset by an amplitude that shrinks with each finer level
-* rendering uses adaptive level of detail
+* the camera's floor follows the local surface rather than the planet's highest point
 
 ## Orbit
 

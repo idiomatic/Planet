@@ -33,6 +33,21 @@ float up_planet_sea_level(const up_planet *planet); // meters
 float up_planet_min_elevation(const up_planet *planet);
 float up_planet_max_elevation(const up_planet *planet);
 
+// Patches: triangles of the subdivided icosahedron, named by level (0 up to
+// up_patch_max_level()), base face (0...19), and path (one child index, 0...3, per level,
+// most significant first), each drawn as a fixed lattice of finer triangles.
+uint32_t up_patch_max_level(void);
+uint32_t up_patch_vertex_count(void);
+uint32_t up_patch_surface_index_count(void); // the surface's indices come first...
+uint32_t up_patch_index_count(void);         // ...then the skirts'
+void up_patch_indices(uint32_t *out);        // shared by every patch
+
+// Writes up_patch_vertex_count() vertices of 8 floats: unit direction (3), elevation in
+// meters, tangential elevation gradient in meters per radian (3), and skirt (0 or 1).
+// Pure and thread-safe.
+void up_patch_generate(const up_planet *planet, uint32_t level, uint32_t face, uint64_t path,
+                       float *out);
+
 // Unit vector toward the sun in the planet's frame, `seconds` after epoch.
 void up_planet_sun_direction(const up_planet *planet, double seconds, float out[3]);
 

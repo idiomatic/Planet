@@ -10,6 +10,7 @@ enum Snapshot {
         guard let planet = Planet(options.parameters),
               let renderer = Renderer(planet: planet)
         else { fail() }
+        renderer.patches.synchronous = true
         renderer.place(options.camera(for: planet))
         renderer.showMesh = options.showMesh
         guard let image = renderer.snapshot(width: options.size[0], height: options.size[1]),
