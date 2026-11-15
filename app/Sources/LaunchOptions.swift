@@ -13,20 +13,27 @@ struct LaunchOptions {
     static let usage = """
         Usage: Planet [--switch value ...]
 
-        Any switch skips the parameter panel and opens straight to a planet.
+        Any switch opens straight to a planet, with the sidebar closed unless --sidebar open.
         Every switch takes a value.
 
-        Planet:
+          --sidebar <open|closed> start with the sidebar open or closed (default open
+                                 without other switches, closed with them; ⌃⌘I toggles)
+
+        Planet (generation):
           --seed <text>          seed; a decimal number is used as is (default hal9000)
-          --radius <%>           planet radius, % of Earth (default 100)
-          --exaggeration <%>     radial exaggeration, display only (default 100; live: -/=)
           --region-scale <n>     region scale, ≥ 1 (default 1)
+
+        View (live; the sidebar adjusts them while flying):
+          --exaggeration <%>     radial exaggeration (default 100; keys -/=)
+          --radius <%>           planet radius, % of Earth (default 100)
           --sea-level <%>        sea level, % of the elevation range (default 55)
+          --air <× Earth>        air density (default 1; 0 for none; keys [/], H off and on)
           --tilt <degrees>       axial tilt (default 23.44)
           --day <× Earth>        day length (default 1)
           --year <× Earth>       year length (default 1)
-          --air <× Earth>        air density, for the atmosphere (default 1; 0 for none;
-                                 live: [/], H turns it off and on)
+          --detail <pixels>      refine patches whose triangles exceed this (default 12)
+          --exposure <n>         exposure for the atmosphere (default 0.25)
+          --fov <degrees>        vertical field of view (default 60)
 
         Camera:
           --direction <x,y,z>    camera direction from the center (default 0,0,1)
@@ -62,7 +69,7 @@ struct LaunchOptions {
     private static let switches: Set = [
         "--seed", "--radius", "--exaggeration", "--region-scale", "--sea-level", "--tilt", "--day",
         "--year", "--air", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--mesh",
-        "--lod-blend", "--snapshot",
+        "--lod-blend", "--sidebar", "--detail", "--exposure", "--fov", "--snapshot",
         "--size", "--benchmark", "--video", "--duration", "--fps", "--bitrate",
     ]
 
@@ -80,6 +87,7 @@ struct LaunchOptions {
     }
 
     var parameters = PlanetParameters()
+    var view = ViewValues.earth
     var timeSpeed: Double?
     var showMesh = false
     var blendLevels = true
@@ -102,12 +110,26 @@ struct LaunchOptions {
     private var direction: SIMD3<Float> = [0, 0, 1]
     private var seconds: Double?
 
-    /// Options from this process's arguments, or nil when there are no switches.
+    /// Options from this process's arguments, or nil when there are no switches (other than
+    /// --sidebar).
     static let current = LaunchOptions(CommandLine.arguments.dropFirst())
+
+    /// Whether the sidebar starts open: as --sidebar says, else open without other switches.
+    static var sidebarOpen: Bool {
+        let arguments = Array(CommandLine.arguments.dropFirst())
+        if let i = arguments.firstIndex(of: "--sidebar"), i + 1 < arguments.count {
+            return arguments[i + 1] == "open"
+        }
+        return current == nil
+    }
 
     init?(_ arguments: some Collection<String>) {
         let arguments = Array(arguments)
         guard arguments.contains(where: { $0.hasPrefix("--") }) else { return nil }
+        // Only --sidebar: start as without switches (no planet yet), with the sidebar as asked.
+        guard arguments.contains(where: { $0.hasPrefix("--") && $0 != "--sidebar" }) else {
+            return nil
+        }
         func value(_ name: String) -> String? {
             arguments.firstIndex(of: name).flatMap { $0 + 1 < arguments.count ? arguments[$0 + 1] : nil }
         }
@@ -116,14 +138,18 @@ struct LaunchOptions {
         }
 
         parameters.seed = value("--seed") ?? "hal9000"
-        number("--radius") { parameters.radiusScale = $0 }
-        number("--exaggeration") { parameters.radialExaggeration = $0 }
-        number("--region-scale") { parameters.regionScale = $0 }
-        number("--sea-level") { parameters.seaLevel = $0 }
-        number("--tilt") { parameters.axialTilt = $0 }
-        number("--day") { parameters.dayLength = $0 }
-        number("--year") { parameters.yearLength = $0 }
-        number("--air") { parameters.airDensity = max($0, 0) }
+        number("--region-scale") { parameters.regionScale = max($0, 1) }
+        number("--radius") { view.radiusScale = $0 }
+        number("--exaggeration") { view.exaggeration = $0 }
+        number("--sea-level") { view.seaLevel = $0 }
+        number("--tilt") { view.axialTilt = $0 }
+        number("--day") { view.dayLength = $0 }
+        number("--year") { view.yearLength = $0 }
+        number("--air") { view.airDensity = $0 }
+        number("--detail") { view.detail = $0 }
+        number("--exposure") { view.exposure = $0 }
+        number("--fov") { view.fieldOfView = $0 }
+        view.clamp()
 
         timeSpeed = value("--time-speed").flatMap(Double.init)
         showMesh = value("--mesh") == "on"
@@ -160,9 +186,9 @@ struct LaunchOptions {
         let p = planet.positions
         let summit = normalize(SIMD3(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]))
         let side = normalize(cross(summit, abs(summit.y) > 0.99 ? SIMD3(1, 0, 0) : SIMD3(0, 1, 0)))
-        let day = 86_400 * planet.parameters.dayLength
+        let day = 86_400 * view.dayLength
         let morning = stride(from: 0, to: day, by: day / 288).first {
-            (0.25...0.4).contains(dot(planet.sunDirection(at: $0), summit))
+            (0.25...0.4).contains(dot(view.sunDirection(at: $0), summit))
         }
         return Camera(
             position: normalize(summit + side * 0.12) * (distance ?? 1.04),

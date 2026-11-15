@@ -1,24 +1,10 @@
 import Foundation
 
-/// Parameters as the panel shows them; percentages are in percent. Defaults are Earth's.
+/// Generation parameters: fixed once a planet is generated. (The live parameters are in
+/// ViewValues.)
 struct PlanetParameters: Equatable {
     var seed = ""
-    var radiusScale = 100.0
-    var radialExaggeration = 100.0
     var regionScale = 1.0
-    var seaLevel = 55.0
-    var axialTilt = 23.44
-    var dayLength = 1.0
-    var yearLength = 1.0
-    /// The air's density relative to Earth's (display only, for now).
-    var airDensity = 1.0
-
-    /// These parameters with Earth's values, keeping the seed.
-    var earthlike: PlanetParameters {
-        var earth = PlanetParameters()
-        earth.seed = seed
-        return earth
-    }
 
     var seedValue: UInt64 {
         let bytes = Array(seed.utf8)
@@ -27,15 +13,12 @@ struct PlanetParameters: Equatable {
         }
     }
 
+    /// The core's parameters. Radius, sea level, and the orbit are live now, so the core gets
+    /// Earth's; nothing it generates depends on them.
     var core: pl_params {
         pl_params(
-            seed: seedValue,
-            radius_scale: radiusScale / 100,
-            region_scale: regionScale,
-            sea_level: seaLevel / 100,
-            axial_tilt: axialTilt,
-            day_length: dayLength,
-            year_length: yearLength
+            seed: seedValue, radius_scale: 1, region_scale: regionScale, sea_level: 0.55,
+            axial_tilt: 23.44, day_length: 1, year_length: 1
         )
     }
 }
@@ -64,24 +47,16 @@ final class Planet: @unchecked Sendable {
     var elevations: UnsafeBufferPointer<Float> {
         UnsafeBufferPointer(start: pl_planet_elevations(handle), count: vertexCount)
     }
-    var indices: UnsafeBufferPointer<UInt32> {
-        UnsafeBufferPointer(start: pl_planet_indices(handle), count: Int(pl_planet_index_count(handle)))
-    }
-    var radius: Double { pl_planet_radius(handle) }
-    var seaLevel: Float { pl_planet_sea_level(handle) }
     var minElevation: Float { pl_planet_min_elevation(handle) }
     var maxElevation: Float { pl_planet_max_elevation(handle) }
+
+    /// Sea level in meters, at `percent` of the surface elevation range.
+    func seaLevel(percent: Double) -> Float {
+        minElevation + Float(percent / 100) * (maxElevation - minElevation)
+    }
 
     /// Writes the patch's vertices; `out` holds pl_patch_vertex_count() × 12 floats.
     func generatePatch(_ key: PatchKey, into out: inout [Float]) {
         pl_patch_generate(handle, key.level, key.face, key.path, &out)
-    }
-
-    func sunDirection(at seconds: Double) -> SIMD3<Float> {
-        var out: (Float, Float, Float) = (0, 0, 0)
-        withUnsafeMutablePointer(to: &out) {
-            $0.withMemoryRebound(to: Float.self, capacity: 3) { pl_planet_sun_direction(handle, seconds, $0) }
-        }
-        return SIMD3(out.0, out.1, out.2)
     }
 }

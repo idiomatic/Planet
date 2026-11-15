@@ -50,6 +50,8 @@ void pl_patch_generate(const pl_planet *planet, uint32_t level, uint32_t face, u
                        float *out);
 
 // Unit vector toward the sun in the planet's frame, `seconds` after epoch.
-void pl_planet_sun_direction(const pl_planet *planet, double seconds, float out[3]);
+// A pure function of the orbit (tilt in degrees, day and year lengths relative to Earth's).
+void pl_sun_direction(double axial_tilt, double day_length, double year_length, double seconds,
+                      float out[3]);
 
 #endif

@@ -13,5 +13,8 @@ struct PlanetApp: App {
         WindowGroup("Planet") {
             ContentView()
         }
+        // Without a default size, the window would grow to fit the whole sidebar.
+        .defaultSize(width: 1100, height: 700)
+        .commands { InspectorCommands() }
     }
 }

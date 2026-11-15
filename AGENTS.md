@@ -27,22 +27,24 @@ Procedurally generated Earth-like planet viewer for macOS. Planned features: [DE
 
 ## Parameters
 
-Entered on an in-window panel (not a modal sheet, so menus such as Quit stay usable) before generation; defaults are Earth's. Each number has a slider (logarithmic for ratios, rounding to 3 significant digits; linear for sea level, 0–100, and tilt, 0–90°) beside an editable value, which may go beyond the slider's range. A globe button beside the title resets every number to Earth's, keeping the seed, and is disabled when they already are.
+Set in a trailing sidebar (an inspector; a toolbar button or ⌃⌘I shows and hides it), open by default, closed when launched with switches, either as `--sidebar open|closed` says. Defaults are Earth's. Each number has an editable value beside its label and a slider beneath (logarithmic for ratios, rounding to 3 significant digits; linear for sea level, tilt, and field of view), with a tick at Earth's value (the default, for render settings) that snaps the slider there when clicked and is accented while the value matches; the value may go beyond the slider's range. A globe button resets every parameter to Earth's, keeping the seed. The sidebar's bottom, pinned below the scrolling parameters, shows readouts (seed, time speed, day, altitude, patches drawn and cached) and the controls.
 
-Generation parameters, fixed once a planet is generated:
+Generation parameters (the sidebar's Planet section), applied by Generate or Return in the seed field; edits are marked pending until then:
 
 * seed (user-provided text; a decimal number is used as is, other text is hashed with FNV-1a)
-* planet radius scale (% of Earth)
 * region scale (float ≥ 1, relative to Earth): larger gives fewer, larger regions, up to comically large
+
+Live parameters (the View section), which change only the view, so they apply as they change, and switches set their starting values; they persist across generated planets:
+
+* radial exaggeration (%, 1–1,000,000; keys `-` and `=`, four steps of 2^¼ doubling or halving)
+* planet radius (% of Earth): scales the display like exaggeration, and the air and kilometer readouts
 * sea level (% of the surface elevation range, from lowest to highest; default 55%)
-* axial tilt (degrees)
-* day length (relative to Earth)
-* year length (relative to Earth)
+* air density (relative to Earth, 0–100; keys `[` and `]`; 0 is no atmosphere): H turns it off and back on to its last nonzero value
+* axial tilt (degrees), day length and year length (relative to Earth): the sun's direction is a pure function of these and time (`pl_sun_direction`)
+* detail (pixels): patches are refined while their triangles exceed it (default 12)
+* exposure (default 0.25) and vertical field of view (degrees, default 60)
 
-Live parameters, which change only the view, so the panel and switches set their starting values and keys adjust them while flying (four steps of 2^¼ double or halve them); reopening the panel shows their current values:
-
-* radial exaggeration (%, 1–1,000,000; `-` and `=`): changing it refits the cached patches' bounds and skirts and keeps the camera above the new floor
-* air density (relative to Earth, 0–100; `[` and `]`; 0 is no atmosphere): H turns it off and back on to its last nonzero value
+Exaggeration, radius, and sea level move the surface, so changing them refits the cached patches' bounds and skirts and keeps the camera above the new floor; the rest only redraw. The live values are one observed model (`ViewSettings`) that the sidebar binds to, the keys change, and the renderer watches and clamps (not in a `didSet`, which under `@Observable` recurses).
 
 ## Viewer
 
@@ -50,9 +52,9 @@ Live parameters, which change only the view, so the panel and switches set their
 * time speed (%, default 360,000%, i.e., an hour per second; 0 pauses): `,` and `.` divide and multiply it by 10, stepping between 1% and 0
 * M (or `--mesh on`) toggles drawing the mesh's edges over the surface; B (or `--lod-blend off`) toggles LOD blending; H turns the air off and on, `[` and `]` adjust its density, and `-` and `=` adjust the relief
 * draws only when something changes: continuously while a movement key is held (up to 120 fps) or time runs (30 fps), otherwise once per change (drag, scroll, toggle, resize, or a newly generated patch); idle with time paused uses no CPU
-* a status line shows seed, time speed, elapsed days, altitude, air density, and relief, with the controls, updating at most 4 times a second while drawing continuously
+* readouts update at most 4 times a second while drawing continuously
 * no save or export; the seed and parameters reproduce a planet
-* command-line switches set the parameters, initial camera, and controls (time speed), skip the panel, and generate at launch; every switch takes a value, since AppKit opens a bare argument as a file and then shows no window (defined in [app/Sources/LaunchOptions.swift](app/Sources/LaunchOptions.swift))
+* command-line switches set the parameters, initial camera, and controls (time speed), and generate at launch; every switch takes a value, since AppKit opens a bare argument as a file and then shows no window (defined in [app/Sources/LaunchOptions.swift](app/Sources/LaunchOptions.swift))
 * `--help` or `-h` prints usage and exits; an unknown switch prints usage to stderr and exits with status 2
 * `--snapshot <png>` instead renders one frame offscreen and exits
 * `--video <mp4>` instead renders a looping flight offscreen and encodes it (H.264 High, BT.709, default 1920×1080, 60 fps, 120 s, 12 Mbps; `--duration`, `--fps`, `--bitrate`, `--size`), rendering at 2× and scaling down with a Lanczos filter in sRGB; the flight holds the sun still and circles the subsolar point through the highest peak (the sun ~50° from its zenith), with periodic distance, altitude, and view, so it loops seamlessly
@@ -72,7 +74,7 @@ Live parameters, which change only the view, so the panel and switches set their
 * LOD blending (geomorphing): the vertex shader blends each vertex from the parent's values to its own as the parent's triangles grow on screen from the split threshold to 1.5× it, so a patch matches its parent when it appears and is fully its own across the whole patch before it splits (ending at 2× pops, since a patch's far side lies ~15% farther than its near side); B or `--lod-blend on|off` toggles it (default on)
 * skirts hang below patch edges to hide cracks where levels meet
 * the vertex shader displaces radially by elevation × exaggeration (oceans flat at sea level) and derives normals from the gradient
-* the status line shows patches drawn and cached; `--benchmark` reports patches drawn, visited, and generated per frame, and the cache hit rate
+* the sidebar's readouts show patches drawn and cached; `--benchmark` reports patches drawn, visited, and generated per frame, and the cache hit rate
 
 ## Atmosphere
 

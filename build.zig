@@ -8,13 +8,14 @@ const swift_sources = [_][]const u8{
     "app/Sources/FlightView.swift",
     "app/Sources/LaunchOptions.swift",
     "app/Sources/Math.swift",
-    "app/Sources/ParameterPanel.swift",
     "app/Sources/PatchCache.swift",
     "app/Sources/Planet.swift",
     "app/Sources/Renderer.swift",
     "app/Sources/Shaders.swift",
+    "app/Sources/Sidebar.swift",
     "app/Sources/Snapshot.swift",
     "app/Sources/Video.swift",
+    "app/Sources/ViewSettings.swift",
 };
 
 pub fn build(b: *std.Build) void {

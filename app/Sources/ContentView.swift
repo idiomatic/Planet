@@ -2,42 +2,36 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var parameters = LaunchOptions.current?.parameters ?? PlanetParameters()
+    @State private var settings = ViewSettings(LaunchOptions.current?.view ?? .earth)
     @State private var renderer: Renderer?
-    @State private var showingPanel = LaunchOptions.current == nil
+    /// The sidebar opens by default, but not when launched with switches, unless --sidebar says.
+    @State private var showingSidebar = LaunchOptions.sidebarOpen
     @State private var failed = false
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack {
             Color.black
             if let renderer {
-                PlanetView(renderer: renderer, focused: !showingPanel)
-                Text(renderer.statusLine.text)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.white.opacity(0.8))
-                    .padding(8)
-            }
-            if showingPanel {
-                Color.black.opacity(0.4)
-                ParameterPanel(
-                    parameters: $parameters,
-                    canCancel: renderer != nil,
-                    generate: generate,
-                    close: { showingPanel = false }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                PlanetView(renderer: renderer)
+            } else {
+                Text("Enter a seed and choose Generate.")
+                    .foregroundStyle(.white.opacity(0.6))
             }
         }
-        .frame(minWidth: 800, minHeight: 500)
+        .frame(minWidth: 600, minHeight: 500)
+        .inspector(isPresented: $showingSidebar) {
+            Sidebar(
+                parameters: $parameters,
+                current: renderer?.planet.parameters,
+                settings: settings,
+                readouts: renderer?.readouts,
+                generate: generate
+            )
+            .inspectorColumnWidth(min: 260, ideal: 300, max: 420)
+        }
         .toolbar {
-            Button("New Planet", systemImage: "globe") {
-                // Start from the live parameters as they are now.
-                if let renderer {
-                    parameters.airDensity = renderer.airDensity
-                    parameters.radialExaggeration = renderer.exaggeration
-                }
-                showingPanel = true
-            }
-                .disabled(showingPanel)
+            Button("Sidebar", systemImage: "sidebar.trailing") { showingSidebar.toggle() }
+                .help("Show or hide the sidebar (⌃⌘I)")
         }
         .alert("The planet couldn’t be generated.", isPresented: $failed) {}
         .onAppear {
@@ -52,7 +46,7 @@ struct ContentView: View {
     }
 
     private func generate() {
-        guard let planet = Planet(parameters), let renderer = Renderer(planet: planet) else {
+        guard let planet = Planet(parameters), let renderer = Renderer(planet: planet, settings: settings) else {
             failed = true
             return
         }
@@ -62,8 +56,6 @@ struct ContentView: View {
 
 struct PlanetView: NSViewRepresentable {
     let renderer: Renderer
-    /// Whether the view should take keyboard focus for flying.
-    let focused: Bool
 
     func makeNSView(context: Context) -> FlightView {
         let view = FlightView(frame: .zero, device: renderer.device)
@@ -81,6 +73,7 @@ struct PlanetView: NSViewRepresentable {
         view.delegate = renderer
         renderer.view = view
         renderer.mtkView(view, drawableSizeWillChange: view.drawableSize)
-        view.flightFocus = focused
+        // Takes keyboard focus for flying when a planet appears; clicking it takes it again.
+        view.flightFocus = true
     }
 }

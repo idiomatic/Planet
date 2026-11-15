@@ -16,7 +16,7 @@ enum Video {
         let supersample = 2
 
         guard let planet = Planet(options.parameters),
-              let renderer = Renderer(planet: planet),
+              let renderer = Renderer(planet: planet, settings: ViewSettings(options.view)),
               let pass = renderer.offscreenPass(width: width * supersample, height: height * supersample),
               let rendered = pass.colorAttachments[0].texture,
               // The sRGB-encoded bytes as is, so scaling happens in sRGB, as video expects.
@@ -62,7 +62,7 @@ enum Video {
         guard writer.startWriting() else { fail("start: \(writer.error?.localizedDescription ?? "")") }
         writer.startSession(atSourceTime: .zero)
 
-        let flight = LoopingFlight(planet: planet, floor: renderer.floorRadius)
+        let flight = LoopingFlight(planet: planet, view: options.view, floor: renderer.floorRadius)
         let start = Date()
         for i in 0..<frames {
             renderer.place(flight.camera(at: Double(i) / Double(frames)))
@@ -122,19 +122,19 @@ struct LoopingFlight {
     private let seconds: Double
 
     @MainActor
-    init(planet: Planet, floor: Float) {
+    init(planet: Planet, view: ViewValues, floor: Float) {
         let elevations = planet.elevations
         let i = elevations.indices.max { elevations[$0] < elevations[$1] }!
         let p = planet.positions
         let summit = normalize(SIMD3(Double(p[i * 3]), Double(p[i * 3 + 1]), Double(p[i * 3 + 2])))
 
         // The time of day when the sun stands 50° from the summit's zenith (or as near as it gets).
-        let day = 86_400 * planet.parameters.dayLength
+        let day = 86_400 * view.dayLength
         let ideal = cos(50 * Double.pi / 180)
         seconds = stride(from: 0, to: day, by: day / 1440).min {
-            abs(Self.sun(planet, $0, summit) - ideal) < abs(Self.sun(planet, $1, summit) - ideal)
+            abs(Self.sun(view, $0, summit) - ideal) < abs(Self.sun(view, $1, summit) - ideal)
         } ?? 0
-        let s = planet.sunDirection(at: seconds)
+        let s = view.sunDirection(at: seconds)
         center = normalize(SIMD3(Double(s.x), Double(s.y), Double(s.z)))
         radius = acos(min(max(dot(center, summit), -1), 1))
         e1 = normalize(summit - center * dot(summit, center))
@@ -142,8 +142,8 @@ struct LoopingFlight {
         self.floor = Double(floor)
     }
 
-    private static func sun(_ planet: Planet, _ seconds: Double, _ point: SIMD3<Double>) -> Double {
-        let s = planet.sunDirection(at: seconds)
+    private static func sun(_ view: ViewValues, _ seconds: Double, _ point: SIMD3<Double>) -> Double {
+        let s = view.sunDirection(at: seconds)
         return dot(SIMD3(Double(s.x), Double(s.y), Double(s.z)), point)
     }
 

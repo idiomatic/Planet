@@ -91,7 +91,10 @@ final class PatchCache {
     var scale: Float {
         didSet { if scale != oldValue { patches.values.forEach(fit) } }
     }
-    private let seaLevel: Float
+    /// Sea level in meters; oceans sit at it, so changing it also refits every cached patch.
+    var seaLevel: Float {
+        didSet { if seaLevel != oldValue { patches.values.forEach(fit) } }
+    }
     private var patches: [PatchKey: Patch] = [:]
     private var pending: Set<PatchKey> = []
     /// Patches this selection wanted but lacked, with their parent's triangle size on screen.
@@ -106,7 +109,7 @@ final class PatchCache {
     nonisolated private static let floatsPerVertex = 12
     private static let roots = (0..<20).map { PatchKey(level: 0, face: UInt32($0), path: 0) }
 
-    init?(planet: Planet, device: MTLDevice, scale: Float) {
+    init?(planet: Planet, device: MTLDevice, scale: Float, seaLevel: Float) {
         let indexCount = Int(pl_patch_index_count())
         var indices = [UInt32](repeating: 0, count: indexCount)
         pl_patch_indices(&indices)
@@ -121,7 +124,7 @@ final class PatchCache {
         self.planet = planet
         self.device = device
         self.scale = scale
-        self.seaLevel = planet.seaLevel
+        self.seaLevel = seaLevel
         for key in Self.roots { install(key, Self.vertices(planet, key)) }
     }
 

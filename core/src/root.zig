@@ -91,20 +91,26 @@ pub const Planet = struct {
     }
 
     pub fn sunDirection(self: *const Planet, seconds: f64) Vec {
-        const tau = 2.0 * std.math.pi;
-        const orbit = tau * seconds / (earth_year * self.params.year_length);
-        const spin = tau * seconds / (earth_day * self.params.day_length);
-        const tilt = std.math.degreesToRadians(self.params.axial_tilt);
-        // Ecliptic: the orbit lies in x–z, with the planet's axis tilted toward +z.
-        const s: Vec = .{ @cos(orbit), 0, @sin(orbit) };
-        const untilted: Vec = .{ s[0], s[2] * @sin(tilt), s[2] * @cos(tilt) };
-        return .{
-            untilted[0] * @cos(spin) - untilted[2] * @sin(spin),
-            untilted[1],
-            untilted[0] * @sin(spin) + untilted[2] * @cos(spin),
-        };
+        return sunFromOrbit(self.params.axial_tilt, self.params.day_length, self.params.year_length, seconds);
     }
 };
+
+/// The unit vector toward the sun in the planet's frame, `seconds` after epoch: a pure function
+/// of the orbit, so tilt, day length, and year length can change while time runs.
+pub fn sunFromOrbit(axial_tilt: f64, day_length: f64, year_length: f64, seconds: f64) Vec {
+    const tau = 2.0 * std.math.pi;
+    const orbit = tau * seconds / (earth_year * @max(year_length, 0.001));
+    const spin = tau * seconds / (earth_day * @max(day_length, 0.001));
+    const tilt = std.math.degreesToRadians(axial_tilt);
+    // Ecliptic: the orbit lies in x–z, with the planet's axis tilted toward +z.
+    const s: Vec = .{ @cos(orbit), 0, @sin(orbit) };
+    const untilted: Vec = .{ s[0], s[2] * @sin(tilt), s[2] * @cos(tilt) };
+    return .{
+        untilted[0] * @cos(spin) - untilted[2] * @sin(spin),
+        untilted[1],
+        untilted[0] * @sin(spin) + untilted[2] * @cos(spin),
+    };
+}
 
 /// Icosphere whose vertices carry their lowest subdivision-path address.
 const Mesh = struct {
@@ -544,8 +550,8 @@ export fn pl_patch_generate(handle: *const Handle, level: u32, face: u32, path: 
     generatePatch(planet.params, @intCast(level), @intCast(face), path, out[0 .. patch_vertices * patch_vertex_floats]);
 }
 
-export fn pl_planet_sun_direction(handle: *const Handle, seconds: f64, out: *[3]f32) void {
-    const s = planetOf(handle).sunDirection(seconds);
+export fn pl_sun_direction(axial_tilt: f64, day_length: f64, year_length: f64, seconds: f64, out: *[3]f32) void {
+    const s = sunFromOrbit(axial_tilt, day_length, year_length, seconds);
     for (0..3) |k| out[k] = @floatCast(s[k]);
 }
 

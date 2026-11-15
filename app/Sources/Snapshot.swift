@@ -8,7 +8,7 @@ enum Snapshot {
     static func runIfRequested() {
         guard let options = LaunchOptions.current, let output = options.snapshot else { return }
         guard let planet = Planet(options.parameters),
-              let renderer = Renderer(planet: planet)
+              let renderer = Renderer(planet: planet, settings: ViewSettings(options.view))
         else { fail() }
         renderer.patches.synchronous = true
         renderer.place(options.camera(for: planet))
