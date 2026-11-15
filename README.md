@@ -6,7 +6,7 @@ A procedurally generated Earth-like planet viewer for macOS. [AGENTS.md](AGENTS.
 
 [Watch the flight](docs/demo.mp4): two minutes, looping, over the planet "perihelion" with relief exaggerated 50×, through the atmosphere and a sunset (1080p60, 43 MB).
 
-![The planet "perihelion" from orbit](docs/perihelion.png)
+![The planet "Mihira" from orbit](docs/mihira.png)
 
 ## Building and running
 
@@ -31,7 +31,7 @@ Planet isn't notarized: the linker signs it ad hoc, which is enough for a copy b
 
 Building from source avoids quarantine altogether.
 
-Enter a seed (any text, such as `perihelion`) in the sidebar and choose Generate. The sidebar's View section adjusts the rest while you fly; ticks under the sliders mark Earth's values. Drag to look; scroll to zoom; W/S, A/D, and R/F fly; Q/E roll; Shift goes faster; M shows the mesh; B toggles LOD blending; H turns the air off and on, `[` and `]` adjust its density, and `-` and `=` adjust the relief; `,` and `.` slow and speed time; Space pauses and resumes it. Edit the seed or region scale and choose Generate for a new planet; the globe button resets everything to Earth's values.
+Enter a seed (any text, such as `Mihira`) in the sidebar and choose Generate. The sidebar's View section adjusts the rest while you fly; ticks under the sliders mark Earth's values. Drag to look; scroll to zoom; W/S, A/D, and R/F fly; Q/E roll; Shift goes faster; M shows the mesh; B toggles LOD blending; H turns the air off and on, `[` and `]` adjust its density, and `-` and `=` adjust the relief; `,` and `.` slow and speed time; Space pauses and resumes it. Edit the seed or region scale and choose Generate for a new planet; the globe button resets everything to Earth's values.
 
 Command-line switches open straight to a planet, with the sidebar closed unless `--sidebar open`; `--help` lists them:
 
@@ -42,7 +42,7 @@ Command-line switches open straight to a planet, with the sidebar closed unless 
 For example, to start beside the highest peak with 30× relief and time paused:
 
 ```sh
-zig build run -- --seed perihelion --exaggeration 3000 --distance 1.12 \
+zig build run -- --seed Mihira --exaggeration 3000 --distance 1.12 \
   --look-at peak --time-speed 0
 ```
 
@@ -52,20 +52,20 @@ To render a still without opening a window, as for the image above:
 
 ```sh
 "zig-out/Planet.app/Contents/MacOS/Planet" \
-  --snapshot docs/perihelion.png --seed perihelion --direction 1,0.3,1
+  --snapshot docs/mihira.png --seed Mihira --direction 1,0.3,1
 ```
 
 To render a looping flight video (2 minutes at 1080p60 takes about 6 minutes on an M2, mostly the atmosphere):
 
 ```sh
 "zig-out/Planet.app/Contents/MacOS/Planet" \
-  --seed perihelion --exaggeration 5000 --video demo.mp4
+  --seed Mihira --exaggeration 5000 --video demo.mp4
 ```
 
 The demo above was rendered at 50 Mbps, then re-encoded with x264 to fit the repository (SSIM 0.996 and PSNR 52.1 dB against the master). [docs/demo.md](docs/demo.md) has the full directions for re-recording it: the flight's design, the poster frame, and the checks.
 
 ```sh
-Planet --seed perihelion --exaggeration 5000 --video master.mp4 --bitrate 50
+Planet --seed Mihira --exaggeration 5000 --video master.mp4 --bitrate 50
 for pass in 1 2; do
   ffmpeg -y -i master.mp4 -c:v libx264 -preset slow -b:v 2900k \
     -maxrate 4500k -bufsize 9000k -pass $pass -profile:v high \

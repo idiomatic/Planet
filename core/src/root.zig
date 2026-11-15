@@ -671,6 +671,6 @@ test "a day or year length of 0 stops the spin or the orbit" {
 
 test "seeds from text" {
     try std.testing.expectEqual(@as(u64, 9000), seedFromString("9000"));
-    try std.testing.expectEqual(seedFromString("perihelion"), seedFromString("perihelion"));
+    try std.testing.expectEqual(seedFromString("Mihira"), seedFromString("Mihira"));
     try std.testing.expect(seedFromString("hal") != seedFromString("art"));
 }

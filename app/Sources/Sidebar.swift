@@ -39,7 +39,7 @@ struct Sidebar: View {
                     .disabled(isEarth)
                 }
                 VStack(alignment: .leading, spacing: 10) {
-                    TextField("Seed", text: $parameters.seed, prompt: Text("e.g., perihelion"))
+                    TextField("Seed", text: $parameters.seed, prompt: Text("e.g., Mihira"))
                         .textFieldStyle(.roundedBorder)
                         .focused($seedFocused)
                         .onSubmit { if !parameters.seed.isEmpty { generate() } }

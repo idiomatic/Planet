@@ -4,7 +4,7 @@ How [demo.mp4](demo.mp4) and its poster, [demo-poster.jpg](demo-poster.jpg), are
 
 ## Direction
 
-* **Planet:** seed `perihelion`, otherwise Earth's defaults, with relief exaggerated 50× (`--exaggeration 5000`), so the mountains read from altitude.
+* **Planet:** seed `Mihira`, otherwise Earth's defaults, with relief exaggerated 50× (`--exaggeration 5000`), so the mountains read from altitude.
 * **Light:** the sun holds still, about 50° from the zenith over the highest peak, so the relief is lit obliquely, except at the sunset.
 * **Path:** one closed loop around the point beneath the sun, through the highest peak, on the sunlit side. Along it:
   * the distance from that point swings ±0.12 radians, three times around the loop;
@@ -23,7 +23,7 @@ Build a release, render a near-lossless master (about 6 minutes on an M2, mostly
 ```sh
 zig build -Drelease
 APP="zig-out/Planet.app/Contents/MacOS/Planet"
-"$APP" --seed perihelion --exaggeration 5000 --video master.mp4 --bitrate 50
+"$APP" --seed Mihira --exaggeration 5000 --video master.mp4 --bitrate 50
 
 for pass in 1 2; do
   ffmpeg -y -i master.mp4 -c:v libx264 -preset slow -b:v 2900k \
