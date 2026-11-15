@@ -1,6 +1,6 @@
 # Planet
 
-A procedurally generated Earth-like planet viewer for macOS. [AGENTS.md](AGENTS.md) is the specification; [DEVELOPMENT.md](DEVELOPMENT.md) lists planned work.
+Planet generates an Earth-like planet from a seed, any text you like, and lets you fly around it, from orbit down to mountain valleys, with a day and night cycle, seasons, and a scattering atmosphere. The same seed always makes the same planet.
 
 https://github.com/user-attachments/assets/8356c427-d77b-459e-b8af-666fced457e9
 
@@ -8,18 +8,15 @@ A two-minute looping flight over the planet "Mihira," with relief exaggerated 50
 
 ![The planet "Mihira" from orbit](docs/mihira.png)
 
-## Building and running
+The terrain is a placeholder (warped fractal noise) until plate tectonics lands; [DEVELOPMENT.md](DEVELOPMENT.md) lists what's planned, and [AGENTS.md](AGENTS.md) is the full specification.
 
-With Zig 0.17+ and Xcode's command-line tools:
+## Getting Planet
 
-```sh
-zig build run   # build and launch
-zig build test  # core tests
-```
+Planet runs on macOS 15 or later, on Apple silicon.
 
-### Running a downloaded copy
+### Downloading
 
-Releases on GitHub include a zipped `Planet.app` for Apple silicon. Planet isn't notarized: it's signed ad hoc, which is enough for a copy built on the same Mac. A copy downloaded from the internet (or received through AirDrop or Messages) is quarantined, so macOS refuses to open it, saying it can't be verified or is damaged. If you trust where it came from, either:
+Download `Planet-…-macos-arm64.zip` from the [latest release](https://github.com/idiomatic/Planet/releases/latest) and unzip it. Planet isn't notarized (it's signed ad hoc), so macOS quarantines a downloaded copy and refuses to open it, saying it can't be verified or is damaged. If you trust where it came from, either:
 
 * remove the quarantine, then open it as usual:
 
@@ -29,11 +26,41 @@ Releases on GitHub include a zipped `Planet.app` for Apple silicon. Planet isn't
 
 * or try to open it once, then choose Open Anyway in System Settings › Privacy & Security, and confirm.
 
-Building from source avoids quarantine altogether.
+### Building from source
 
-Enter a seed (any text, such as `Mihira`) in the sidebar and choose Generate. The sidebar's View section adjusts the rest while you fly; ticks under the sliders mark Earth's values. Drag to look; scroll to zoom; W/S, A/D, and R/F fly; Q/E roll; Shift goes faster; M shows the mesh; B toggles LOD blending; H turns the air off and on, `[` and `]` adjust its density, and `-` and `=` adjust the relief; `,` and `.` slow and speed time; Space pauses and resumes it. Edit the seed or region scale and choose Generate for a new planet; the globe button resets everything to Earth's values.
+With [Zig](https://ziglang.org) 0.17 or later and Xcode's command-line tools:
 
-Command-line switches open straight to a planet, with the sidebar closed unless `--sidebar open`; `--help` lists them:
+```sh
+zig build run   # build and launch
+zig build test  # core tests
+```
+
+The app is installed at `zig-out/Planet.app`. A copy built on your own Mac isn't quarantined.
+
+## Using Planet
+
+Type a seed in the sidebar (any text, such as `Mihira`) and choose Generate. The sidebar's Planet section holds what shapes the planet (the seed and region scale), applied by Generate. Its View section changes the view live while you fly: relief, sea level, air density, axial tilt, day and year length, detail, exposure, and field of view. Ticks under the sliders mark Earth's values; click one to snap back. The globe button resets everything to Earth's values. ⌃⌘I or the toolbar button shows and hides the sidebar.
+
+| Control | Action |
+| --- | --- |
+| Drag | Look around |
+| Scroll | Zoom toward where you're looking |
+| W / S, A / D, R / F | Fly forward and back, left and right, up and down |
+| Q / E | Roll |
+| Shift | Fly faster |
+| Space | Pause and resume time |
+| `,` / `.` | Slow down and speed up time (10× per step) |
+| H | Turn the air off and on |
+| `[` / `]` | Thin and thicken the air |
+| `-` / `=` | Flatten and exaggerate the relief |
+| M | Show the triangle mesh |
+| B | Turn LOD blending off and on |
+
+Flight speed scales with altitude, so the same keys work from orbit down to the ground, and you can't fly into the terrain.
+
+## Command line
+
+Command-line switches set the parameters and the starting camera, and open straight to a planet, with the sidebar closed unless `--sidebar open`. `--help` lists them:
 
 ```sh
 "zig-out/Planet.app/Contents/MacOS/Planet" --help
@@ -46,7 +73,7 @@ zig build run -- --seed Mihira --exaggeration 3000 --distance 1.12 \
   --look-at peak --time-speed 0
 ```
 
-Every switch takes a value. AppKit reads arguments in `-key value` pairs and opens any leftover argument as a file, which suppresses the window.
+Every switch takes a value: AppKit reads arguments in `-key value` pairs and opens any leftover argument as a file, which suppresses the window.
 
 To render a still without opening a window, as for the image above:
 
@@ -62,52 +89,36 @@ To render a looping flight video (2 minutes at 1080p60 takes about 6 minutes on 
   --seed Mihira --exaggeration 5000 --video demo.mp4
 ```
 
-The demo above was rendered at 50 Mbps, re-encoded to 720p60 under GitHub's 10 MB limit for uploaded videos, and attached to [an issue](https://github.com/idiomatic/Planet/issues/1), which hosts it; it isn't in the repository. [docs/demo.md](docs/demo.md) has the full directions for re-recording it: the flight's design, the encoding, the upload, and the checks.
-
-The elevation is a placeholder (warped fractal noise) until tectonics lands.
+The demo above was made this way, encoded under GitHub's 10 MB limit for uploaded videos, and is hosted in [an issue](https://github.com/idiomatic/Planet/issues/1); [docs/demo.md](docs/demo.md) has the directions for re-recording it.
 
 ## Performance
 
-`--benchmark <frames>` renders offscreen along a path that circles the planet while descending from orbit to the surface, twice (cold, then warm), and reports timings, patch counts, and memory. On an Apple M2 (10-core GPU), a release build (`zig build -Drelease`), 300 frames at 2560×1600, mesh off:
+Planet aims to fly smoothly at full detail on a base M1 and to use no power when nothing moves. The strategies:
 
-| | Cold pass | Warm pass |
-| --- | ---: | ---: |
-| Patches drawn / visited per frame | 574 / 1,056 | 574 / 1,056 |
-| Patches generated | 7,752 (0.07 ms each) | 7,336 |
-| Cache hit rate | 97.6% | 97.7% |
-| Frame without generation (CPU+GPU) | 0.85 ms | 1.08 ms |
-| GPU frame | 0.67 ms | 0.84 ms |
+* **Detail only where it's seen.** A full-resolution planet (168 million vertices) wouldn't fit in an 8 GB Mac's memory, so only a coarse mesh (~105 km triangles) is stored. Finer patches, down to ~1.6 km triangles, are generated around the camera, refined by their size on screen, and culled outside the view or behind the horizon.
+* **Generation off the main thread.** Missing patches are generated on background threads, largest on screen first, while their parent stays drawn; a cache keeps 4,096 of them between frames.
+* **Cheap generation.** The terrain's slope is computed exactly alongside its height, instead of by sampling the height five times, so a patch takes 0.07 ms (3.8× faster).
+* **Drawing only on change.** Frames are drawn only while something moves (up to 120 fps while flying, 30 fps while time runs); idle with time paused uses no CPU.
+* **Smooth transitions for free.** LOD blending eases each new patch in from its parent's shape, removing popping at no measurable GPU cost.
 
-Peak memory is 119 MB: the coarse mesh (11 MB), 4,096 cached patches (9.6 KB each, 39 MB), and the render targets. The path's working set (7,752 patches) exceeds the cache's 4,096, so the warm pass regenerates nearly as much as the cold one; within a frame, though, only about 2% of patches are new. Benchmarks generate synchronously, so their mean frame time includes generation; the app generates on background threads and keeps drawing the parent meanwhile.
+On an Apple M2 at 2560×1600, flying from orbit to the surface:
 
-CPU use was cut by drawing only when something changes and by computing the elevation gradient exactly (by the chain rule through the noise and its warp) instead of by finite differences, which sampled the elevation five times per vertex. Patch generation went from 0.275 to 0.072 ms (3.8×), and the benchmark's total CPU time from 5.3 to 2.2 s. In a 4 GB macOS VM, the app's CPU use as `top` reports it:
+| | Result |
+| --- | ---: |
+| GPU frame, terrain alone | 0.7 ms |
+| GPU frame, with the atmosphere | 4.7 ms |
+| Patches drawn per frame | 574 |
+| Patch cache hit rate | 98% |
+| Peak memory | 119 MB |
+| CPU idle, time paused / running | 0% / 2–4% |
 
-| | Before | After |
-| --- | ---: | ---: |
-| Idle, time paused | 17–21% | 0% |
-| Idle, time running | 14–22% | 2–4% |
-| Flying | ~19% | 11–23% |
-
-Flying still draws at up to 120 fps and generates patches; the rest of its cost is noise, which midpoint displacement (planned) would mostly replace.
-
-The figures above predate the atmosphere. With it, the GPU frame rises from about 0.68 to 4.7 ms on the same path (frames from the cache: 1.0 to 3.2–4.5 ms, CPU and GPU), mostly the per-pixel raymarch (12 view steps × 6 sun steps for terrain, 32 × 6 for the sky). A precomputed transmittance table would remove most of the sun steps.
-
-LOD blending costs no measurable GPU time (0.616 vs. 0.612 ms per frame) and 16 bytes per vertex for the parent's values. To measure popping, 80 snapshots approaching the highest peak (30× relief, 640×400) were compared frame to frame; a pop is a frame whose change departs from the average of its neighbors' by more than 0.2 (on a 0–255 scale):
-
-| Blending | Pops | Largest jump | Mean jump |
-| --- | ---: | ---: | ---: |
-| Off | 12 | 0.35 | 0.092 |
-| Ending at 2× the threshold | 9 | 0.60 | 0.086 |
-| Ending at 1.5× (default) | 0 | 0.15 | 0.034 |
-
-Before patches, the renderer drew the whole coarse mesh at once, which grew 4× per level: level 9 (2.6 million vertices) took 5.1 ms of GPU per frame and 1.2 GB peak, and level 10 took 15.7 ms and 4.0 GB, while the core kept about 266 bytes per vertex where about 48 are needed (its arena keeps generation leftovers). Patches reach level 12 detail near the camera for far less.
+The atmosphere's raymarch is now most of the frame; a precomputed transmittance table (planned) would remove most of its cost. [docs/performance.md](docs/performance.md) has the full measurements.
 
 ## Design notes
 
 * **Reproducible planets.** Generation is deterministic, so a seed and its parameters fully describe a planet; there's nothing to save or export.
 * **Region scale.** Values above 1 exaggerate regions, simplifying the planet as seen from orbit; below 1 would be absurd in a different way, so it isn't allowed.
-* **Memory.** A full 12-level icosphere has 10·4¹²+2 ≈ 168 million vertices, about 670 MB per 32-bit field, more than an 8 GB M1 can hold across all fields. So only a coarse level is stored globally, and finer levels are generated around the camera, as patches.
-* **Patches.** Selection refines by projected triangle size, so detail follows the camera without a fixed radius. A patch's vertices come from the same midpoint normalizations as the coarse mesh and an exact gradient, so neighbors agree exactly where they share vertices; skirts cover the T-junctions where a fine patch meets a coarser one.
+* **Patches.** A patch's vertices come from the same midpoint normalizations as the coarse mesh and an exact gradient, so neighbors agree exactly where they share vertices; skirts cover the T-junctions where a fine patch meets a coarser one.
 * **Vertex addresses.** A vertex on a shared edge or corner is reachable by several subdivision paths; picking the lowest gives it one detail value, so neighboring triangles don't crack apart.
 * **Detail field.** Hashing (seed, address) alone yields uncorrelated white noise; midpoint displacement with shrinking amplitude turns it into natural-looking terrain.
 * **Time.** Only human-scale phenomena change while time runs; geology is generated once.
