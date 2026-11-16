@@ -164,6 +164,9 @@ final class PatchCache {
                 missing = []
             } else {
                 for child in missing where !pending.contains(child) { wanted.append((pixels, child)) }
+                // Keep the children that have arrived while their siblings are generated: evicting
+                // them as unused would leave the parent waiting forever once the cache is full.
+                if !missing.isEmpty { for child in children { patches[child]?.lastUsed = frame } }
             }
             if missing.isEmpty {
                 for child in children { visit(child, view, &list) }
@@ -215,6 +218,7 @@ final class PatchCache {
         let patch = Patch(
             buffer: buffer, level: key.level, parentEdge: key.level > 0 ? 2 * Self.triangleEdge(key.level) : 0)
         fit(patch)
+        patch.lastUsed = frame // new, not least recently used
         patches[key] = patch
         onInstall?()
     }
