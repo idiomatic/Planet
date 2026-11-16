@@ -438,10 +438,6 @@ fn normalize(v: Vec) Vec {
     return .{ v[0] / n, v[1] / n, v[2] / n };
 }
 
-fn cross(a: Vec, b: Vec) Vec {
-    return .{ a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0] };
-}
-
 /// Octaves of the placeholder elevation: its finest wavelength (~1 km at Earth's radius) suits
 /// the finest patches. Fixed, so a point's elevation doesn't depend on which patch asks.
 const elevation_octaves = 13;
@@ -583,26 +579,6 @@ export fn pl_planet_vertex_count(handle: *const Handle) u32 {
     return @intCast(planetOf(handle).elevations.len);
 }
 
-export fn pl_planet_positions(handle: *const Handle) [*]const f32 {
-    return planetOf(handle).positions.ptr;
-}
-
-export fn pl_planet_elevations(handle: *const Handle) [*]const f32 {
-    return planetOf(handle).elevations.ptr;
-}
-
-export fn pl_planet_addresses(handle: *const Handle) [*]const u64 {
-    return planetOf(handle).addresses.ptr;
-}
-
-export fn pl_planet_index_count(handle: *const Handle) u32 {
-    return @intCast(planetOf(handle).indices.len);
-}
-
-export fn pl_planet_indices(handle: *const Handle) [*]const u32 {
-    return planetOf(handle).indices.ptr;
-}
-
 export fn pl_planet_surface(handle: *const Handle, exaggeration: f64, sea_level: f64) Surface {
     return planetOf(handle).surface(exaggeration, sea_level);
 }
@@ -619,12 +595,12 @@ export fn pl_planet_max_elevation(handle: *const Handle) f32 {
     return planetOf(handle).max_elevation;
 }
 
-export fn pl_patch_max_level() u32 {
-    return max_patch_level;
-}
-
 export fn pl_patch_vertex_count() u32 {
     return patch_vertices;
+}
+
+export fn pl_patch_float_count() u32 {
+    return lod.patch_floats;
 }
 
 export fn pl_patch_surface_index_count() u32 {
@@ -684,10 +660,6 @@ export fn pl_lod_set_capacity_bytes(handle: *LodHandle, bytes: u64) void {
 export fn pl_lod_install(handle: *LodHandle, key: lod.Key, vertices: [*]const f32) i64 {
     const slot = lodOf(handle).install(key, vertices[0..lod.patch_floats]) catch return -2;
     return if (slot) |s| s else -1;
-}
-
-export fn pl_lod_cancel(handle: *LodHandle, key: lod.Key) void {
-    lodOf(handle).cancel(key);
 }
 
 export fn pl_lod_select(

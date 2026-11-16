@@ -16,16 +16,13 @@ enum Video {
         let supersample = 2
 
         guard let planet = Planet(options.parameters),
-              let renderer = Renderer(planet: planet, settings: ViewSettings(options.view)),
+              let renderer = Renderer.offscreen(options, planet: planet),
               let pass = renderer.offscreenPass(width: width * supersample, height: height * supersample),
               let rendered = pass.colorAttachments[0].texture,
               // The sRGB-encoded bytes as is, so scaling happens in sRGB, as video expects.
               let source = rendered.makeTextureView(pixelFormat: .bgra8Unorm),
               let queue = renderer.device.makeCommandQueue()
         else { fail("setup") }
-        renderer.patches.synchronous = true
-        renderer.showMesh = options.showMesh
-        renderer.blendLevels = options.blendLevels
 
         let targetDescriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)

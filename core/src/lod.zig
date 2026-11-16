@@ -75,8 +75,9 @@ pub const Lod = struct {
     gpa: Allocator,
     params: core.Params,
     storage: Storage,
-    /// Most patches kept; least recently used ones beyond this are evicted.
-    capacity: u32 = 4096,
+    /// Most patches kept; least recently used ones beyond this are evicted (40 MB's worth, by
+    /// default, as the app's).
+    capacity: u32 = 40_000_000 / patch_bytes,
     /// Triangle edge, in pixels, above which a patch is refined.
     target_pixels: f32 = 12,
     /// Radii per meter of elevation, with exaggeration.
@@ -192,11 +193,6 @@ pub const Lod = struct {
         self.index.putAssumeCapacity(key, slot);
         self.generated += 1;
         return slot;
-    }
-
-    /// Forgets a requested patch that won't be installed (its generation failed).
-    pub fn cancel(self: *Lod, key: Key) void {
-        _ = self.pending.remove(key);
     }
 
     /// Selects the patches to draw for a view (the coarsest that look fine) and evicts stale
@@ -540,12 +536,12 @@ test "eviction removes the least recently used, never the roots, and reuses thei
     try testing.expect(std.mem.indexOfScalar(u32, f.released.items, (try f.install(children[0])).?) != null);
 }
 
-test "installing a cached patch is ignored, and cancelling clears a request" {
+test "installing a cached patch is ignored, and installing a requested one clears it" {
     const f = try Fixture.create();
     defer f.destroy();
     try testing.expectEqual(null, try f.install(.{ .level = 0, .face = 3, .path = 0 }));
     try f.select(.{ 0, 0, 1.2 }, 1);
-    f.lod.cancel(f.lod.requests.items[0]);
+    try testing.expect((try f.install(f.lod.requests.items[0])) != null);
     try testing.expectEqual(0, f.lod.stats().pending);
 }
 

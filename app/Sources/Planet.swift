@@ -56,7 +56,7 @@ final class Planet: @unchecked Sendable {
         pl_planet_surface(handle, view.exaggeration, view.seaLevel)
     }
 
-    /// Writes the patch's vertices; `out` holds pl_patch_vertex_count() × 12 floats.
+    /// Writes the patch's vertices; `out` holds pl_patch_float_count() floats.
     func generatePatch(_ key: PatchKey, into out: inout [Float]) {
         pl_patch_generate(handle, key.level, key.face, key.path, &out)
     }

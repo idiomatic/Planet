@@ -33,7 +33,7 @@ private final class PatchBuffers {
             context: Unmanaged.passUnretained(self).toOpaque(),
             acquire: { context, slot in
                 let self_ = Unmanaged<PatchBuffers>.fromOpaque(context!).takeUnretainedValue()
-                let length = Int(pl_patch_vertex_count()) * 12 * MemoryLayout<Float>.stride
+                let length = Int(pl_patch_float_count()) * MemoryLayout<Float>.stride
                 guard let buffer = self_.device.makeBuffer(length: length, options: .storageModeShared)
                 else { return nil }
                 let slot = Int(slot)
@@ -147,7 +147,7 @@ final class PatchCache {
     private func request(_ key: PatchKey) {
         let planet = planet
         Task.detached(priority: .utility) {
-            var vertices = [Float](repeating: 0, count: Int(pl_patch_vertex_count()) * 12)
+            var vertices = [Float](repeating: 0, count: Int(pl_patch_float_count()))
             planet.generatePatch(key, into: &vertices)
             await self.install(key, vertices)
         }

@@ -8,12 +8,9 @@ enum Snapshot {
     static func runIfRequested() {
         guard let options = LaunchOptions.current, let output = options.snapshot else { return }
         guard let planet = Planet(options.parameters),
-              let renderer = Renderer(planet: planet, settings: ViewSettings(options.view))
+              let renderer = Renderer.offscreen(options, planet: planet)
         else { fail() }
-        renderer.patches.synchronous = true
         renderer.place(options.camera(for: planet))
-        renderer.showMesh = options.showMesh
-        renderer.blendLevels = options.blendLevels
         guard let image = renderer.snapshot(width: options.size[0], height: options.size[1]),
               let destination = CGImageDestinationCreateWithURL(
                   URL(fileURLWithPath: output) as CFURL, UTType.png.identifier as CFString, 1, nil)

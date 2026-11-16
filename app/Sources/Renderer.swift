@@ -143,6 +143,16 @@ final class Renderer: NSObject, MTKViewDelegate {
         observeSettings()
     }
 
+    /// A renderer for the offscreen modes (snapshot, benchmark, and video): generating patches
+    /// synchronously, with the switches' mesh and blending.
+    static func offscreen(_ options: LaunchOptions, planet: Planet) -> Renderer? {
+        guard let renderer = Renderer(planet: planet, settings: ViewSettings(options.view)) else { return nil }
+        renderer.patches.synchronous = true
+        renderer.showMesh = options.showMesh
+        renderer.blendLevels = options.blendLevels
+        return renderer
+    }
+
     // MARK: Live values
 
     /// Applies each change to the live values, then watches for the next.

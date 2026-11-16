@@ -17,12 +17,9 @@ enum Benchmark {
         guard let planet = Planet(options.parameters) else { fail() }
         let generation = Date().timeIntervalSince(start)
         let afterCore = Memory.now()
-        guard let renderer = Renderer(planet: planet, settings: ViewSettings(options.view)),
+        guard let renderer = Renderer.offscreen(options, planet: planet),
               let pass = renderer.offscreenPass(width: width, height: height)
         else { fail() }
-        renderer.showMesh = options.showMesh
-        renderer.blendLevels = options.blendLevels
-        renderer.patches.synchronous = true
         let afterRenderer = Memory.now()
 
         print("""

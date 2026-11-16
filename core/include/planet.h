@@ -19,12 +19,7 @@ uint64_t pl_seed_from_string(const char *text, size_t length);
 pl_planet *pl_planet_create(const pl_params *params);
 void pl_planet_destroy(pl_planet *planet);
 
-uint32_t pl_planet_vertex_count(const pl_planet *planet);
-const float *pl_planet_positions(const pl_planet *planet); // unit xyz per vertex
-const float *pl_planet_elevations(const pl_planet *planet); // meters per vertex
-const uint64_t *pl_planet_addresses(const pl_planet *planet);
-uint32_t pl_planet_index_count(const pl_planet *planet);
-const uint32_t *pl_planet_indices(const pl_planet *planet);
+uint32_t pl_planet_vertex_count(const pl_planet *planet); // of the coarse mesh
 
 // The surface as the view shows it, with relief exaggerated `exaggeration` percent and the sea
 // at `sea_level` percent of the elevation range; lengths in radii of the displayed planet.
@@ -41,11 +36,11 @@ void pl_planet_peak(const pl_planet *planet, float out[3]); // highest coarse ve
 float pl_planet_min_elevation(const pl_planet *planet);
 float pl_planet_max_elevation(const pl_planet *planet);
 
-// Patches: triangles of the subdivided icosahedron, named by level (0 up to
-// pl_patch_max_level()), base face (0...19), and path (one child index, 0...3, per level,
-// most significant first), each drawn as a fixed lattice of finer triangles.
-uint32_t pl_patch_max_level(void);
+// Patches: triangles of the subdivided icosahedron, named by level (0–8), base face (0...19),
+// and path (one child index, 0...3, per level, most significant first), each drawn as a fixed
+// lattice of finer triangles.
 uint32_t pl_patch_vertex_count(void);
+uint32_t pl_patch_float_count(void); // per patch: vertex count × 12
 uint32_t pl_patch_surface_index_count(void); // the surface's indices come first...
 uint32_t pl_patch_index_count(void);         // ...then the skirts'
 void pl_patch_indices(uint32_t *out);        // shared by every patch
@@ -104,7 +99,6 @@ void pl_lod_set_capacity_bytes(pl_lod *lod, uint64_t bytes);
 // Copies a patch generated elsewhere into storage. Returns its slot, -1 if it's already cached,
 // or -2 if out of memory or storage.
 int64_t pl_lod_install(pl_lod *lod, pl_patch_key key, const float *vertices);
-void pl_lod_cancel(pl_lod *lod, pl_patch_key key); // a request that won't be installed
 // Selects for a view (column-major view-projection, reverse Z, no far plane): the patches to
 // draw, and up to `max_in_flight` pending requests (most visible first) or, when
 // `synchronous`, none, having generated every missing patch; each list is valid until the
