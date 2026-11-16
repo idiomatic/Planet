@@ -58,3 +58,19 @@
 ## Biome
 
 * derived from terrain and climate
+
+## Next
+
+Tectonics (above) is the next stage: it replaces the placeholder elevation, whose noise has the same gentle slope at every scale, so fine detail barely shows at Earth's relief, and climate, hydrology, and biomes build on it. Smaller work, already scoped:
+
+* parallel synchronous generation (snapshots, benchmarks, video), through `std.Io`, as background generation already is: the benchmark's cold pass would generate in ~0.1 s instead of ~0.5 s
+* a sky-view or aerial-perspective table (Hillaire 2020) for the view rays' remaining raymarch, now most of the atmosphere's cost (~60% of the GPU frame); it changes pixels
+* the demo's flight path (`LoopingFlight`) into the core, with a test of the loop's seam in place of comparing frames
+* view settings (defaults, ranges, and key steps) into the core, only if another front end comes
+* checks: changing relief while flying (it rebuilds the transmittance table); refresh the README's performance table with a benchmark run; re-record the demo, which predates the finer octaves and the transmittance table
+
+## Practice
+
+* profile release builds outside their app bundle: Instruments launches a bundle by its identifier, which can pick the debug build in `zig-out`
+* GPU timings on the M2 vary by over 40% between identical runs (clocks follow the load): compare builds in alternating runs, or by a sustained workload such as `--video`
+* run the core's tests with `zig build test`, which uses the coarse level 6; a stale build-options file can carry another level
