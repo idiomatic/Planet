@@ -66,6 +66,7 @@ struct Sidebar: View {
                     row("Day length (× Earth)", $settings.values.dayLength, .logarithmic(0.01...100, zeroAtStart: true), earth: ViewValues.earth.dayLength)
                     row("Year length (× Earth)", $settings.values.yearLength, .logarithmic(0.01...100, zeroAtStart: true), earth: ViewValues.earth.yearLength)
                     row("Detail (pixels; smaller is finer)", $settings.values.detail, .logarithmic(3...48, integer: true), earth: ViewValues.earth.detail)
+                    row("Patch cache (MB)", $settings.values.cacheMegabytes, .logarithmic(16...1024, integer: true), earth: ViewValues.earth.cacheMegabytes)
                     row("Exposure", $settings.values.exposure, .logarithmic(0.05...2), earth: ViewValues.earth.exposure)
                     row("Field of view (°)", $settings.values.fieldOfView, .linear(10...120, integer: true), earth: ViewValues.earth.fieldOfView)
                     // Relief is relative to the radius, so it changes only lengths in km (readouts);
@@ -86,7 +87,7 @@ struct Sidebar: View {
                     readout("Time", readouts.timeSpeed.formatted(.number.precision(.fractionLength(0))) + "%")
                     readout("Day", readouts.day.isNaN ? "—" : String(format: "%.2f", readouts.day))
                     readout("Altitude", readouts.altitude.formatted(.number.precision(.fractionLength(0))) + " km")
-                    readout("Patches", "\(readouts.patchesDrawn) drawn, \(readouts.patchesCached) cached")
+                    readout("Patches", "\(readouts.patchesDrawn) drawn, \(readouts.patchesCached) cached (\(Int(readouts.cachedMegabytes.rounded())) MB)")
                 }
                 .font(.callout.monospacedDigit())
             }

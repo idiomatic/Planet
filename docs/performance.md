@@ -16,6 +16,18 @@ Detailed measurements behind the README's summary. All on an Apple M2 (10-core G
 
 Peak memory is 119 MB: the coarse mesh (11 MB), 4,096 cached patches (9.6 KB each, 39 MB), and the render targets. The path's working set (7,752 patches) exceeds the cache's 4,096, so the warm pass regenerates nearly as much as the cold one; within a frame, though, only about 2% of patches are new. Benchmarks generate synchronously, so their mean frame time includes generation; the app generates on background threads and keeps drawing the parent meanwhile.
 
+## Patch cache size
+
+The benchmark path's working set is about 7,700 patches, more than the default cache's 40 MB (about 4,100 patches), so its warm pass regenerates nearly everything. With `--cache 80`, the whole path fits (7,732 patches, 75 MB); with the atmosphere, 300 frames at 2560×1600:
+
+| Cache | Warm pass generated | Warm hit rate | Warm GPU frame |
+| --- | ---: | ---: | ---: |
+| 40 MB (default) | 7,341 | 97.7% | 6.8 ms |
+| 80 MB | 0 | 100% | 4.7 ms |
+| 200 MB | 0 | 100% | 4.7 ms |
+
+The cold pass is unchanged, since every patch must be generated once. Peak memory varied between runs (163–253 MB), mostly in the frames' Metal allocations rather than the cache.
+
 ## Atmosphere
 
 With the atmosphere, the GPU frame rises from about 0.68 to 4.7 ms on the same path (frames from the cache: 1.0 to 3.2–4.5 ms, CPU and GPU), mostly the per-pixel raymarch (12 view steps × 6 sun steps for terrain, 32 × 6 for the sky). A precomputed transmittance table would remove most of the sun steps.

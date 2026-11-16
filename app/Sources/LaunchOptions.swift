@@ -33,6 +33,8 @@ struct LaunchOptions {
           --year <× Earth>       year length (default 1)
           --detail <pixels>      refine patches whose triangles exceed this (whole pixels,
                                  2–200; default 12)
+          --cache <MB>           patch cache size (whole megabytes, 8–4096; default 40,
+                                 about 4,100 patches)
           --exposure <n>         exposure for the atmosphere (default 0.25)
           --fov <degrees>        vertical field of view (default 60)
 
@@ -70,7 +72,7 @@ struct LaunchOptions {
     private static let switches: Set = [
         "--seed", "--radius", "--exaggeration", "--region-scale", "--sea-level", "--tilt", "--day",
         "--year", "--air", "--direction", "--distance", "--look-at", "--time", "--time-speed", "--mesh",
-        "--lod-blend", "--sidebar", "--detail", "--exposure", "--fov", "--snapshot",
+        "--lod-blend", "--sidebar", "--detail", "--cache", "--exposure", "--fov", "--snapshot",
         "--size", "--benchmark", "--video", "--duration", "--fps", "--bitrate",
     ]
 
@@ -148,6 +150,7 @@ struct LaunchOptions {
         number("--year") { view.yearLength = $0 }
         number("--air") { view.airDensity = $0 }
         number("--detail") { view.detail = $0 }
+        number("--cache") { view.cacheMegabytes = $0 }
         number("--exposure") { view.exposure = $0 }
         number("--fov") { view.fieldOfView = $0 }
         view.clamp()

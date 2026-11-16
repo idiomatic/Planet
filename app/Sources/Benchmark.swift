@@ -76,7 +76,7 @@ enum Benchmark {
                 \(created) generated (\(ms(renderer.patches.generationSeconds - generated)), \
                 \(ms((renderer.patches.generationSeconds - generated) / Double(max(created, 1)))) each); \
                 hit rate \(String(format: "%.1f%%", 100 * Double(visited - created) / Double(max(visited, 1)))); \
-                \(renderer.patches.cachedCount) cached
+                \(renderer.patches.cachedCount) cached (\(renderer.patches.cachedBytes / 1_000_000) MB)
                 """)
         }
         let after = Memory.now()

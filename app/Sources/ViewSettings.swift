@@ -26,6 +26,8 @@ struct ViewValues: Equatable {
     var exposure = 0.25
     /// Vertical field of view (degrees).
     var fieldOfView = 60.0
+    /// Patch cache size, in whole megabytes (10⁶ bytes); 40 holds about 4,100 patches.
+    var cacheMegabytes = 40.0
 
     static let earth = ViewValues()
 
@@ -41,6 +43,7 @@ struct ViewValues: Equatable {
         detail = min(max(detail.rounded(), 2), 200) // whole pixels
         exposure = min(max(exposure, 0.01), 10)
         fieldOfView = min(max(fieldOfView.rounded(), 5), 150) // whole degrees
+        cacheMegabytes = min(max(cacheMegabytes.rounded(), 8), 4096) // whole megabytes
     }
 
     /// The planet's radius, in meters.
@@ -85,4 +88,5 @@ final class Readouts {
     var altitude = 0.0 // km
     var patchesDrawn = 0
     var patchesCached = 0
+    var cachedMegabytes = 0.0
 }

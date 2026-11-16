@@ -143,6 +143,7 @@ final class Renderer: NSObject, MTKViewDelegate {
             seaLevel: planet.seaLevel(percent: values.seaLevel))
         else { return nil }
         patches.targetPixels = Float(values.detail)
+        patches.capacityBytes = Int(values.cacheMegabytes * 1_000_000)
 
         self.device = device
         self.planet = planet
@@ -187,6 +188,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         patches.scale = scale
         patches.seaLevel = seaLevel
         patches.targetPixels = Float(values.detail)
+        patches.capacityBytes = Int(values.cacheMegabytes * 1_000_000)
         if length(position) < floorRadius { position = normalize(position) * floorRadius }
         applied = values
         setNeedsRedraw()
@@ -274,6 +276,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         readouts.altitude = Double(length(position) - 1) * values.radius / 1000
         readouts.patchesDrawn = patches.drawn
         readouts.patchesCached = patches.cachedCount
+        readouts.cachedMegabytes = Double(patches.cachedBytes) / 1_000_000
     }
 
     // MARK: MTKViewDelegate

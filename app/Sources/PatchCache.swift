@@ -71,8 +71,12 @@ final class PatchCache {
     let indexCount: Int
     var synchronous = false
 
-    /// Most patches kept; least recently used ones beyond this are evicted.
-    var capacity = 4096
+    /// Most bytes of patches kept; least recently used ones beyond this are evicted (on the next
+    /// selection, so shrinking applies as soon as the view redraws).
+    var capacityBytes = 40_000_000
+    /// Bytes per patch: its vertices (its share of the index buffer is shared by all).
+    var patchBytes: Int { vertexCount * Self.floatsPerVertex * MemoryLayout<Float>.stride }
+    private var capacity: Int { max(capacityBytes / patchBytes, 1) }
     /// Triangle edge, in pixels, above which a patch is refined.
     var targetPixels: Float = 12
 
@@ -82,6 +86,7 @@ final class PatchCache {
     private(set) var generatedThisFrame = 0
     private(set) var generationSeconds = 0.0
     var cachedCount: Int { patches.count }
+    var cachedBytes: Int { patches.count * patchBytes }
 
     private let planet: Planet
     private let device: MTLDevice
