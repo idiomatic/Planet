@@ -102,3 +102,4 @@ Exaggeration and sea level move the surface, so changing them refits the cached 
 ## Orbit
 
 * rotation (day/night), axial tilt, and orbit (seasons) give the sun's direction in the planet's frame
+* the core finds the highest coarse vertex (`pl_planet_peak`) and the time of day when the sun stands at a given angle over a point, the earliest in a range or the nearest (`pl_sun_time_first`, `pl_sun_time_nearest`), for `--look-at peak` and the demo's flight; without spin there's none

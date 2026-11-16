@@ -42,7 +42,8 @@ struct LaunchOptions {
           --direction <x,y,z>    camera direction from the center (default 0,0,1)
           --distance <radii>     camera distance from the center (default 3, or 1.04 with peak)
           --look-at <x,y,z|peak> point to look at (default 0,0,0); peak looks obliquely at
-                                 the highest point, in morning light unless --time is given
+                                 the highest point, in low sun (66–76° from the zenith)
+                                 unless --time is given
           --time <seconds>       simulated time since epoch (default 0)
 
         Controls:
@@ -185,19 +186,14 @@ struct LaunchOptions {
         guard peak else {
             return Camera(position: direction * (distance ?? 3), target: target, seconds: seconds ?? 0)
         }
-        let elevations = planet.elevations
-        let i = elevations.indices.max { elevations[$0] < elevations[$1] }!
-        let p = planet.positions
-        let summit = normalize(SIMD3(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]))
+        let summit = normalize(planet.peak)
         let side = normalize(cross(summit, abs(summit.y) > 0.99 ? SIMD3(1, 0, 0) : SIMD3(0, 1, 0)))
-        let day = 86_400 * view.dayLength
-        let morning = stride(from: 0, to: day, by: day / 288).first {
-            (0.25...0.4).contains(dot(view.sunDirection(at: $0), summit))
-        }
+        // The first time of day when the sun stands 66–76° from the summit's zenith.
+        let lowSun = view.sunTime(firstIn: 0.25...0.4, at: SIMD3<Double>(summit), samples: 288)
         return Camera(
             position: normalize(summit + side * 0.12) * (distance ?? 1.04),
             target: summit,
-            seconds: seconds ?? morning ?? 0
+            seconds: seconds ?? lowSun ?? 0
         )
     }
 }

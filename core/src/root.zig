@@ -71,6 +71,15 @@ pub const Planet = struct {
         return planet;
     }
 
+    /// The coarse mesh's highest vertex, on the unit sphere (the first, on a tie).
+    pub fn peak(self: *const Planet) [3]f32 {
+        var best: usize = 0;
+        for (self.elevations, 0..) |e, i| {
+            if (e > self.elevations[best]) best = i;
+        }
+        return self.positions[best * 3 ..][0..3].*;
+    }
+
     pub fn destroy(self: *Planet) void {
         var arena = self.arena;
         arena.deinit();
@@ -95,6 +104,68 @@ pub fn sunFromOrbit(axial_tilt: f64, day_length: f64, year_length: f64, seconds:
         untilted[0] * @sin(spin) + untilted[2] * @cos(spin),
     };
 }
+
+/// The orbit, as the sun searches see it.
+pub const Orbit = struct {
+    axial_tilt: f64,
+    day_length: f64,
+    year_length: f64,
+
+    /// The cosine of the sun's angle from `point`'s zenith, `seconds` after epoch, with the sun's
+    /// direction rounded to single precision as the renderer sees it.
+    fn sunCosine(self: Orbit, point: Vec, seconds: f64) f64 {
+        const s = sunFromOrbit(self.axial_tilt, self.day_length, self.year_length, seconds);
+        var cosine: f64 = 0;
+        for (0..3) |k| cosine += @as(f64, @as(f32, @floatCast(s[k]))) * point[k];
+        return cosine;
+    }
+
+    /// Times through the first day, `samples` of them evenly spaced from 0; none without spin.
+    fn sampleTimes(self: Orbit, samples: u32) SampleTimes {
+        const day = earth_day * self.day_length;
+        return .{ .day = day, .step = day / @as(f64, @floatFromInt(samples)) };
+    }
+
+    const SampleTimes = struct {
+        day: f64,
+        step: f64,
+        i: u32 = 0,
+
+        fn next(self: *SampleTimes) ?f64 {
+            const t = @as(f64, @floatFromInt(self.i)) * self.step;
+            if (!(t < self.day)) return null;
+            self.i += 1;
+            return t;
+        }
+    };
+
+    /// The earliest sampled time of the first day when the sun's cosine at `point` lies in
+    /// [`lo`, `hi`].
+    pub fn firstSunTime(self: Orbit, point: Vec, lo: f64, hi: f64, samples: u32) ?f64 {
+        var times = self.sampleTimes(samples);
+        while (times.next()) |t| {
+            const cosine = self.sunCosine(point, t);
+            if (lo <= cosine and cosine <= hi) return t;
+        }
+        return null;
+    }
+
+    /// The sampled time of the first day when the sun's cosine at `point` is nearest `target`
+    /// (the earliest, on a tie).
+    pub fn nearestSunTime(self: Orbit, point: Vec, target: f64, samples: u32) ?f64 {
+        var times = self.sampleTimes(samples);
+        var best: ?f64 = null;
+        var best_error: f64 = 0;
+        while (times.next()) |t| {
+            const err = @abs(self.sunCosine(point, t) - target);
+            if (best == null or err < best_error) {
+                best = t;
+                best_error = err;
+            }
+        }
+        return best;
+    }
+};
 
 /// Icosphere whose vertices carry their lowest subdivision-path address.
 const Mesh = struct {
@@ -492,6 +563,10 @@ export fn pl_planet_indices(handle: *const Handle) [*]const u32 {
     return planetOf(handle).indices.ptr;
 }
 
+export fn pl_planet_peak(handle: *const Handle, out: *[3]f32) void {
+    out.* = planetOf(handle).peak();
+}
+
 export fn pl_planet_min_elevation(handle: *const Handle) f32 {
     return planetOf(handle).min_elevation;
 }
@@ -597,6 +672,35 @@ export fn pl_lod_evicted(handle: *LodHandle, count: *u32) [*]const u32 {
 
 export fn pl_lod_stats_get(handle: *LodHandle) lod.Stats {
     return lodOf(handle).stats();
+}
+
+export fn pl_sun_time_first(
+    axial_tilt: f64,
+    day_length: f64,
+    year_length: f64,
+    point: *const [3]f64,
+    lo: f64,
+    hi: f64,
+    samples: u32,
+    seconds: *f64,
+) bool {
+    const orbit: Orbit = .{ .axial_tilt = axial_tilt, .day_length = day_length, .year_length = year_length };
+    seconds.* = orbit.firstSunTime(point.*, lo, hi, samples) orelse return false;
+    return true;
+}
+
+export fn pl_sun_time_nearest(
+    axial_tilt: f64,
+    day_length: f64,
+    year_length: f64,
+    point: *const [3]f64,
+    target: f64,
+    samples: u32,
+    seconds: *f64,
+) bool {
+    const orbit: Orbit = .{ .axial_tilt = axial_tilt, .day_length = day_length, .year_length = year_length };
+    seconds.* = orbit.nearestSunTime(point.*, target, samples) orelse return false;
+    return true;
 }
 
 export fn pl_sun_direction(axial_tilt: f64, day_length: f64, year_length: f64, seconds: f64, out: *[3]f32) void {
@@ -746,6 +850,40 @@ test "a day or year length of 0 stops the spin or the orbit" {
     const still = sunFromOrbit(23.44, 0, 0, 1e7);
     const start = sunFromOrbit(23.44, 0, 0, 0);
     for (0..3) |k| try std.testing.expectEqual(start[k], still[k]);
+}
+
+test "the peak is the highest coarse vertex" {
+    const planet = try Planet.create(std.testing.allocator, earth);
+    defer planet.destroy();
+    const peak = planet.peak();
+    for (planet.elevations, 0..) |e, i| {
+        if (e == planet.max_elevation) {
+            try std.testing.expectEqual(planet.positions[i * 3 ..][0..3].*, peak);
+            break;
+        }
+    }
+}
+
+test "sun times: the first is earliest in range, the nearest is nearest, and no spin has none" {
+    const orbit: Orbit = .{ .axial_tilt = 23.44, .day_length = 1, .year_length = 1 };
+    const point = normalize(.{ 1, 0.2, 0.3 });
+    const first = orbit.firstSunTime(point, 0.25, 0.4, 288).?;
+    const cosine = orbit.sunCosine(point, first);
+    try std.testing.expect(0.25 <= cosine and cosine <= 0.4);
+    var t: f64 = 0;
+    while (t < first) : (t += earth_day / 288) {
+        const c = orbit.sunCosine(point, t);
+        try std.testing.expect(!(0.25 <= c and c <= 0.4));
+    }
+    const target = @cos(std.math.degreesToRadians(50.0));
+    const nearest = orbit.nearestSunTime(point, target, 1440).?;
+    const step = earth_day / 1440;
+    const err = @abs(orbit.sunCosine(point, nearest) - target);
+    try std.testing.expect(err <= @abs(orbit.sunCosine(point, nearest + step) - target));
+    try std.testing.expect(err <= @abs(orbit.sunCosine(point, nearest - step) - target));
+    const still: Orbit = .{ .axial_tilt = 23.44, .day_length = 0, .year_length = 1 };
+    try std.testing.expectEqual(null, still.firstSunTime(point, 0.25, 0.4, 288));
+    try std.testing.expectEqual(null, still.nearestSunTime(point, target, 1440));
 }
 
 test "seeds from text" {

@@ -127,17 +127,10 @@ struct LoopingFlight {
 
     @MainActor
     init(planet: Planet, view: ViewValues, floor: Float) {
-        let elevations = planet.elevations
-        let i = elevations.indices.max { elevations[$0] < elevations[$1] }!
-        let p = planet.positions
-        let summit = normalize(SIMD3(Double(p[i * 3]), Double(p[i * 3 + 1]), Double(p[i * 3 + 2])))
+        let summit = normalize(SIMD3<Double>(planet.peak))
 
         // The time of day when the sun stands 50° from the summit's zenith (or as near as it gets).
-        let day = 86_400 * view.dayLength
-        let ideal = cos(50 * Double.pi / 180)
-        seconds = stride(from: 0, to: day, by: day / 1440).min {
-            abs(Self.sun(view, $0, summit) - ideal) < abs(Self.sun(view, $1, summit) - ideal)
-        } ?? 0
+        seconds = view.sunTime(nearest: cos(50 * Double.pi / 180), at: summit, samples: 1440) ?? 0
         let s = view.sunDirection(at: seconds)
         center = normalize(SIMD3(Double(s.x), Double(s.y), Double(s.z)))
         radius = acos(min(max(dot(center, summit), -1), 1))
@@ -145,11 +138,6 @@ struct LoopingFlight {
         e2 = cross(center, e1)
         self.floor = Double(floor)
         dip = acos(1 / (Double(floor) + Self.low))
-    }
-
-    private static func sun(_ view: ViewValues, _ seconds: Double, _ point: SIMD3<Double>) -> Double {
-        let s = view.sunDirection(at: seconds)
-        return dot(SIMD3(Double(s.x), Double(s.y), Double(s.z)), point)
     }
 
     /// How far the loop has swung out toward the low sun: 0 at the summit, 1 halfway round.

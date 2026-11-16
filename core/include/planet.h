@@ -26,6 +26,7 @@ const uint64_t *pl_planet_addresses(const pl_planet *planet);
 uint32_t pl_planet_index_count(const pl_planet *planet);
 const uint32_t *pl_planet_indices(const pl_planet *planet);
 
+void pl_planet_peak(const pl_planet *planet, float out[3]); // highest coarse vertex, unit
 float pl_planet_min_elevation(const pl_planet *planet);
 float pl_planet_max_elevation(const pl_planet *planet);
 
@@ -89,6 +90,14 @@ pl_lod_stats pl_lod_stats_get(pl_lod *lod);
 
 // Unit vector toward the sun in the planet's frame, `seconds` after epoch.
 // A pure function of the orbit (tilt in degrees, day and year lengths relative to Earth's).
+// Seconds into the first day, sampled `samples` times from 0, when the sun's cosine at `point`
+// (from its zenith) first lies in [lo, hi], or is nearest
+// `target`. Return false when there's no such time (no spin, or never in range).
+bool pl_sun_time_first(double axial_tilt, double day_length, double year_length,
+                       const double point[3], double lo, double hi, uint32_t samples,
+                       double *seconds);
+bool pl_sun_time_nearest(double axial_tilt, double day_length, double year_length,
+                         const double point[3], double target, uint32_t samples, double *seconds);
 void pl_sun_direction(double axial_tilt, double day_length, double year_length, double seconds,
                       float out[3]);
 

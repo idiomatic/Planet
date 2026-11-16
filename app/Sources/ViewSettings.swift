@@ -59,6 +59,23 @@ struct ViewValues: Equatable {
         }
         return SIMD3(out.0, out.1, out.2)
     }
+
+    /// The earliest of `samples` times through the first day when the cosine of the sun's angle
+    /// from `point`'s zenith lies in `range`, or nil (no spin, or never in range).
+    func sunTime(firstIn range: ClosedRange<Double>, at point: SIMD3<Double>, samples: UInt32) -> Double? {
+        var seconds = 0.0
+        var p = [point.x, point.y, point.z]
+        let found = pl_sun_time_first(
+            axialTilt, dayLength, yearLength, &p, range.lowerBound, range.upperBound, samples, &seconds)
+        return found ? seconds : nil
+    }
+
+    /// The one of `samples` times through the first day when that cosine is nearest `target`.
+    func sunTime(nearest target: Double, at point: SIMD3<Double>, samples: UInt32) -> Double? {
+        var seconds = 0.0
+        var p = [point.x, point.y, point.z]
+        return pl_sun_time_nearest(axialTilt, dayLength, yearLength, &p, target, samples, &seconds) ? seconds : nil
+    }
 }
 
 /// The live values, shared by the sidebar (which binds to them), the keys, and the renderer

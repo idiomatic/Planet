@@ -35,11 +35,13 @@ final class Planet: @unchecked Sendable {
     }
 
     var vertexCount: Int { Int(pl_planet_vertex_count(handle)) }
-    var positions: UnsafeBufferPointer<Float> {
-        UnsafeBufferPointer(start: pl_planet_positions(handle), count: vertexCount * 3)
-    }
-    var elevations: UnsafeBufferPointer<Float> {
-        UnsafeBufferPointer(start: pl_planet_elevations(handle), count: vertexCount)
+    /// The coarse mesh's highest vertex, on the unit sphere.
+    var peak: SIMD3<Float> {
+        var out: (Float, Float, Float) = (0, 0, 0)
+        withUnsafeMutablePointer(to: &out) {
+            $0.withMemoryRebound(to: Float.self, capacity: 3) { pl_planet_peak(handle, $0) }
+        }
+        return SIMD3(out.0, out.1, out.2)
     }
     var minElevation: Float { pl_planet_min_elevation(handle) }
     var maxElevation: Float { pl_planet_max_elevation(handle) }
