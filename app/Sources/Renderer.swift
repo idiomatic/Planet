@@ -40,7 +40,8 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// The surface under the camera, in radii.
     private var groundRadius: Float { planet.ground(in: position, values) }
     /// The camera stays at least this far from the center, in radii: above the terrain under it,
-    /// by more than the drawn mesh departs from it between vertices (or a little, at relief 0).
+    /// by more than the finest patches depart from it between vertices (or a little, at relief
+    /// 0). A coarser parent, drawn while they generate, can depart further.
     private var floorRadius: Float { max(groundRadius + scale * Renderer.groundMargin, 1 + 2e-6) }
     /// Above the ground, in meters of elevation, for the camera's floor.
     private static let groundMargin: Float = 20
@@ -153,10 +154,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         let values = settings.values
         let surface = planet.surface(values)
         guard let patches = PatchCache(
-            planet: planet, device: device, scale: surface.scale, seaLevel: surface.sea_level)
+            planet: planet, device: device, scale: surface.scale, seaLevel: surface.sea_level,
+            targetPixels: Float(values.detail), capacityBytes: Int(values.cacheMegabytes * 1_000_000))
         else { return nil }
-        patches.targetPixels = Float(values.detail)
-        patches.capacityBytes = Int(values.cacheMegabytes * 1_000_000)
 
         self.device = device
         self.planet = planet
@@ -298,7 +298,8 @@ final class Renderer: NSObject, MTKViewDelegate {
     private func updateReadouts() {
         readouts.timeSpeed = timeSpeed
         readouts.day = values.dayLength > 0 ? simulatedSeconds / (86_400 * values.dayLength) : .nan
-        readouts.altitude = Double(length(position) - 1) * values.radius / 1000
+        // Above sea level, which sits at a percentage of the elevation range, not at 0 m.
+        readouts.altitude = Double(length(position) - (1 + scale * seaLevel)) * values.radius / 1000
         readouts.patchesDrawn = patches.drawn
         readouts.patchesCached = patches.cachedCount
         readouts.cachedMegabytes = Double(patches.cachedBytes) / 1_000_000

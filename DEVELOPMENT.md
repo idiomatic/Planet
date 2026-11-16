@@ -67,6 +67,7 @@ Tectonics (above) is the next stage: it replaces the placeholder elevation, whos
 * a sky-view or aerial-perspective table (Hillaire 2020) for the view rays' remaining raymarch, now most of the atmosphere's cost (~60% of the GPU frame); it changes pixels
 * the demo's flight path (`LoopingFlight`) into the core, with a test of the loop's seam in place of comparing frames
 * view settings (defaults, ranges, and key steps) into the core, only if another front end comes
+* the camera's floor from the drawn mesh as well as the true ground: while the finest patches under a fast, low camera are still generating, their coarser parent is drawn, which can lie tens of meters above the camera's 20 m margin
 * checks: changing relief while flying (it rebuilds the transmittance table); refresh the README's performance table with a benchmark run; re-record the demo, which predates the finer octaves and the transmittance table
 
 ## Practice

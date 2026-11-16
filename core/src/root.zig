@@ -114,7 +114,7 @@ pub const Planet = struct {
 
     /// The surface in `direction`, in radii: the elevation there (or the sea, if higher), as the
     /// view shows it. The drawn mesh departs from it between vertices, by about a meter at the
-    /// finest level.
+    /// finest level and more at coarser ones.
     pub fn groundAt(self: *const Planet, exaggeration: f64, sea_level: f64, direction: Vec) f32 {
         const s = self.surface(exaggeration, sea_level);
         const ground: f32 = @floatCast(elevation(self.params, normalize(direction)));

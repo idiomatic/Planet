@@ -75,8 +75,8 @@ pub const Lod = struct {
     gpa: Allocator,
     params: core.Params,
     storage: Storage,
-    /// Most patches kept; least recently used ones beyond this are evicted (40 MB's worth, by
-    /// default, as the app's).
+    /// Most patches kept; least recently used ones beyond this are evicted (40 MB's worth until
+    /// the caller sets it).
     capacity: u32 = 40_000_000 / patch_bytes,
     /// Triangle edge, in pixels, above which a patch is refined.
     target_pixels: f32 = 12,
@@ -241,7 +241,13 @@ pub const Lod = struct {
         while (true) {
             try self.selectPlanes(planes, camera, pixels_per_radian, std.math.maxInt(u32));
             if (self.requests.items.len == 0) return;
-            for (self.requests.items) |key| try self.generate(key);
+            for (self.requests.items, 0..) |key, i| {
+                self.generate(key) catch |err| {
+                    // Unpend the rest, or later selections would never request them.
+                    for (self.requests.items[i..]) |rest| _ = self.pending.remove(rest);
+                    return err;
+                };
+            }
         }
     }
 
@@ -262,10 +268,13 @@ pub const Lod = struct {
         // Requests are rebuilt each frame, so a patch the camera has passed is never generated;
         // only those in flight may be.
         std.mem.sort(Want, self.wanted.items, {}, moreVisible);
+        // Reserved first, so a key is never left pending without being requested.
+        try self.pending.ensureUnusedCapacity(self.gpa, @intCast(self.wanted.items.len));
+        try self.requests.ensureUnusedCapacity(self.gpa, self.wanted.items.len);
         for (self.wanted.items) |want| {
             if (self.pending.count() >= max_in_flight) break;
-            try self.pending.put(self.gpa, want.key, {});
-            try self.requests.append(self.gpa, want.key);
+            self.pending.putAssumeCapacityNoClobber(want.key, {});
+            self.requests.appendAssumeCapacity(want.key);
         }
         try self.evict();
     }
@@ -325,7 +334,8 @@ pub const Lod = struct {
         for (view.planes) |plane| {
             if (dot(.{ plane[0], plane[1], plane[2] }, center) + plane[3] < -radius) return true;
         }
-        // Behind the horizon of the lowest surface (sea level, or the deepest land below it).
+        // Behind the horizon of a sphere under every drawn point: the drawn surface never dips
+        // below sea level, and radius 1 is used when the sea lies above it, for simplicity.
         const occluder = @min(1, 1 + self.scale * self.sea_level) * 0.999;
         const d = length(view.camera);
         const c = length(center);
@@ -336,29 +346,39 @@ pub const Lod = struct {
         return angle - extent > horizon;
     }
 
-    /// Fits the slot's bounds and skirt to the scale and sea level.
+    /// Fits the slot's bounds and skirt to the scale and sea level. The bounds hold the surface
+    /// wherever blending puts it, between the parent's elevations and the patch's own; not the
+    /// skirts, which only fill cracks, and would make patches refine sooner.
     fn fit(self: *Lod, slot: u32) void {
         const s = self.slots.slice();
         const vertices = s.items(.vertices)[slot];
+        // Floats of a vertex's own elevation, then the parent's.
+        const elevations = [2]usize{ 3, 8 };
         var lo: Vec3 = @splat(std.math.inf(f32));
         var hi: Vec3 = @splat(-std.math.inf(f32));
         for (0..core.patch_vertices) |v| {
-            const p = self.point(vertices, v);
-            lo = @min(lo, p);
-            hi = @max(hi, p);
+            for (elevations) |e| {
+                const p = self.point(vertices, v, e);
+                lo = @min(lo, p);
+                hi = @max(hi, p);
+            }
         }
         const center = (lo + hi) / splat(2);
         var radius: f32 = 0;
-        for (0..core.patch_vertices) |v| radius = @max(radius, length(self.point(vertices, v) - center));
+        for (0..core.patch_vertices) |v| {
+            for (elevations) |e| radius = @max(radius, length(self.point(vertices, v, e) - center));
+        }
         s.items(.center)[slot] = center;
         s.items(.radius)[slot] = radius;
         s.items(.skirt_depth)[slot] = triangleEdge(s.items(.key)[slot].level) + self.scale * 500;
     }
 
-    fn point(self: *const Lod, vertices: [*]const f32, v: usize) Vec3 {
+    /// Vertex `v` on the surface, at the elevation in float `elevation` (its own or the
+    /// parent's), with oceans flat at sea level, as the shader places it.
+    fn point(self: *const Lod, vertices: [*]const f32, v: usize, elevation: usize) Vec3 {
         const f = v * core.patch_vertex_floats;
         const direction: Vec3 = .{ vertices[f], vertices[f + 1], vertices[f + 2] };
-        return direction * splat(1 + self.scale * @max(vertices[f + 3], self.sea_level));
+        return direction * splat(1 + self.scale * @max(vertices[f + elevation], self.sea_level));
     }
 
     /// Evicts the least recently used patches beyond the capacity, never the roots or those
@@ -433,6 +453,8 @@ const Fixture = struct {
     lod: Lod,
     storage: std.ArrayList([]f32) = .empty,
     released: std.ArrayList(u32) = .empty,
+    /// Slots at or beyond this get no storage.
+    slot_limit: u32 = std.math.maxInt(u32),
 
     fn create() !*Fixture {
         const self = try testing.allocator.create(Fixture);
@@ -453,6 +475,7 @@ const Fixture = struct {
 
     fn acquire(context: ?*anyopaque, slot: u32) callconv(.c) ?[*]f32 {
         const self: *Fixture = @ptrCast(@alignCast(context.?));
+        if (slot >= self.slot_limit) return null;
         while (self.storage.items.len <= slot) {
             const v = testing.allocator.alloc(f32, patch_floats) catch return null;
             self.storage.append(testing.allocator, v) catch {
@@ -570,6 +593,19 @@ test "a synchronous selection generates everything it needs, once" {
     // The same view, selected in the background, finds nothing missing.
     try f.select(.{ 0, 0, 1.2 }, 4);
     try testing.expectEqual(0, f.lod.requests.items.len);
+}
+
+test "a synchronous selection that runs out of storage leaves nothing pending" {
+    const f = try Fixture.create();
+    defer f.destroy();
+    f.slot_limit = 22; // the roots and 2 more
+    try testing.expectError(error.NoStorage, f.selectMode(.{ 0, 0, 1.2 }, 4, true));
+    try testing.expectEqual(0, f.lod.stats().pending);
+    // With storage again, the same selection completes.
+    f.slot_limit = std.math.maxInt(u32);
+    try f.selectMode(.{ 0, 0, 1.2 }, 4, true);
+    try testing.expectEqual(0, f.lod.requests.items.len);
+    try testing.expectEqual(0, f.lod.stats().pending);
 }
 
 test "the capacity in bytes holds whole patches, at least one" {

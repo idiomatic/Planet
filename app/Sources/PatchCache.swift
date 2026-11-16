@@ -63,11 +63,11 @@ final class PatchCache {
 
     /// Most bytes of patches kept; least recently used ones beyond this are evicted (on the next
     /// selection, so shrinking applies as soon as the view redraws).
-    var capacityBytes = 40_000_000 {
+    var capacityBytes: Int {
         didSet { pl_lod_set_capacity_bytes(lod, UInt64(capacityBytes)) }
     }
     /// Triangle edge, in pixels, above which a patch is refined.
-    var targetPixels: Float = 12 {
+    var targetPixels: Float {
         didSet { pl_lod_set_detail(lod, targetPixels) }
     }
     /// Radii per meter of elevation, with exaggeration; changing it refits every cached patch.
@@ -98,7 +98,9 @@ final class PatchCache {
     /// Called when a background patch arrives, so the view can draw it.
     var onInstall: (() -> Void)?
 
-    init?(planet: Planet, device: MTLDevice, scale: Float, seaLevel: Float) {
+    init?(
+        planet: Planet, device: MTLDevice, scale: Float, seaLevel: Float, targetPixels: Float, capacityBytes: Int
+    ) {
         let indexCount = Int(pl_patch_index_count())
         var indices = [UInt32](repeating: 0, count: indexCount)
         pl_patch_indices(&indices)
@@ -115,7 +117,11 @@ final class PatchCache {
         self.buffers = buffers
         self.scale = scale
         self.seaLevel = seaLevel
+        self.targetPixels = targetPixels
+        self.capacityBytes = capacityBytes
         self.lod = lod
+        // Set here, since an initializer's assignments don't call `didSet`.
+        pl_lod_set_detail(lod, targetPixels)
         pl_lod_set_capacity_bytes(lod, UInt64(capacityBytes))
     }
 

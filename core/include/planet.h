@@ -34,7 +34,7 @@ typedef struct {
 pl_surface pl_planet_surface(const pl_planet *planet, double exaggeration, double sea_level);
 // The surface in `direction`, in radii: the elevation there (or the sea, if higher), as the
 // view shows it. The drawn mesh departs from it between vertices, by about a meter at the
-// finest level.
+// finest level and more at coarser ones.
 float pl_planet_ground_at(const pl_planet *planet, double exaggeration, double sea_level,
                           const float direction[3]);
 void pl_planet_peak(const pl_planet *planet, float out[3]); // highest coarse vertex, unit
@@ -49,12 +49,12 @@ uint32_t pl_patch_surface_index_count(void); // the surface's indices come first
 uint32_t pl_patch_index_count(void);         // ...then the skirts'
 void pl_patch_indices(uint32_t *out);        // shared by every patch
 
-// Writes a patch's vertices (pl_patch_float_count() floats), 12 floats each: unit direction (3), elevation in
-// meters, tangential elevation gradient in meters per radian (3), skirt (0 or 1), and the
-// elevation (1) and gradient (3) the parent patch shows there, for blending between levels.
-// Pure and thread-safe.
-// Given its parent's vertices (or NULL), copies the points they share (every other lattice
-// point) instead of computing them, with the same result for about 30% less work.
+// Writes a patch's vertices (pl_patch_float_count() floats), 12 floats each: unit direction
+// (3), elevation in meters, tangential elevation gradient in meters per radian (3), skirt (0 or
+// 1), and the elevation (1) and gradient (3) the parent patch shows there, for blending between
+// levels. Pure and thread-safe. Given its parent's vertices (or NULL), copies the points they
+// share (every other lattice point) instead of computing them, with the same result for about
+// 30% less work.
 void pl_patch_generate(const pl_planet *planet, uint32_t level, uint32_t face, uint64_t path,
                        const float *parent, float *out);
 
@@ -77,15 +77,15 @@ typedef struct {
 typedef struct {
     uint32_t visited;   // cached patches the last selection used
     uint32_t cached;
-    uint32_t pending;   // requested, not yet installed or cancelled
+    uint32_t pending;   // requested, not yet installed
     uint32_t generated; // installed since the last selection began
     uint64_t cached_bytes;
     double generation_seconds; // total, generating synchronously
 } pl_lod_stats;
 
 // Vertex storage the caller lends per slot, called back only during pl_lod_* calls (never
-// from pl_lod_destroy). acquire returns pl_patch_vertex_count() × 12 floats for the slot, lent
-// until release, or NULL if none can be had.
+// from pl_lod_destroy). acquire returns pl_patch_float_count() floats for the slot, lent until
+// release, or NULL if none can be had.
 typedef struct {
     void *context;
     float *(*acquire)(void *context, uint32_t slot);
@@ -118,16 +118,17 @@ const pl_lod_draw *pl_lod_draws(pl_lod *lod, uint32_t *count);
 const pl_patch_key *pl_lod_requests(pl_lod *lod, uint32_t *count);
 pl_lod_stats pl_lod_stats_get(pl_lod *lod);
 
-// Unit vector toward the sun in the planet's frame, `seconds` after epoch.
-// A pure function of the orbit (tilt in degrees, day and year lengths relative to Earth's).
-// Seconds into the first day, sampled `samples` times from 0, when the sun's cosine at `point`
-// (from its zenith) first lies in [lo, hi], or is nearest
-// `target`. Return false when there's no such time (no spin, or never in range).
+// Seconds into the first day, sampled `samples` times from 0, when the cosine of the sun's
+// angle from `point`'s zenith first lies in [lo, hi], or is nearest `target`. Return false
+// when there's no such time (no spin, or never in range).
 bool pl_sun_time_first(double axial_tilt, double day_length, double year_length,
                        const double point[3], double lo, double hi, uint32_t samples,
                        double *seconds);
 bool pl_sun_time_nearest(double axial_tilt, double day_length, double year_length,
                          const double point[3], double target, uint32_t samples, double *seconds);
+
+// Unit vector toward the sun in the planet's frame, `seconds` after epoch.
+// A pure function of the orbit (tilt in degrees, day and year lengths relative to Earth's).
 void pl_sun_direction(double axial_tilt, double day_length, double year_length, double seconds,
                       float out[3]);
 
