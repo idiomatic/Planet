@@ -1,6 +1,8 @@
 const std = @import("std");
 const build_options = @import("build_options");
 
+const lod = @import("lod.zig");
+
 const Allocator = std.mem.Allocator;
 const Vec = [3]f64;
 
@@ -524,6 +526,79 @@ export fn pl_patch_generate(handle: *const Handle, level: u32, face: u32, path: 
     generatePatch(planet.params, @intCast(level), @intCast(face), path, out[0 .. patch_vertices * patch_vertex_floats]);
 }
 
+const LodHandle = opaque {};
+
+fn lodOf(handle: *LodHandle) *lod.Lod {
+    return @ptrCast(@alignCast(handle));
+}
+
+export fn pl_lod_create(scale: f32, sea_level: f32) ?*LodHandle {
+    const self = std.heap.smp_allocator.create(lod.Lod) catch return null;
+    self.* = .init(std.heap.smp_allocator, scale, sea_level);
+    return @ptrCast(self);
+}
+
+export fn pl_lod_destroy(handle: ?*LodHandle) void {
+    const self = lodOf(handle orelse return);
+    self.deinit();
+    std.heap.smp_allocator.destroy(self);
+}
+
+export fn pl_lod_set_surface(handle: *LodHandle, scale: f32, sea_level: f32) void {
+    lodOf(handle).setSurface(scale, sea_level);
+}
+
+export fn pl_lod_set_detail(handle: *LodHandle, target_pixels: f32) void {
+    lodOf(handle).target_pixels = target_pixels;
+}
+
+export fn pl_lod_set_capacity(handle: *LodHandle, patches: u32) void {
+    lodOf(handle).capacity = patches;
+}
+
+/// The slot, or -1 if the patch is already cached, or -2 if out of memory.
+export fn pl_lod_install(handle: *LodHandle, key: lod.Key, vertices: [*]const f32) i64 {
+    const slot = lodOf(handle).install(key, vertices) catch return -2;
+    return if (slot) |s| s else -1;
+}
+
+export fn pl_lod_cancel(handle: *LodHandle, key: lod.Key) void {
+    lodOf(handle).cancel(key);
+}
+
+export fn pl_lod_select(
+    handle: *LodHandle,
+    view_projection: *const [16]f32,
+    camera: *const [3]f32,
+    pixels_per_radian: f32,
+    max_in_flight: u32,
+) bool {
+    lodOf(handle).select(view_projection, camera.*, pixels_per_radian, max_in_flight) catch return false;
+    return true;
+}
+
+export fn pl_lod_draws(handle: *LodHandle, count: *u32) [*]const lod.Draw {
+    const items = lodOf(handle).draws.items;
+    count.* = @intCast(items.len);
+    return items.ptr;
+}
+
+export fn pl_lod_requests(handle: *LodHandle, count: *u32) [*]const lod.Key {
+    const items = lodOf(handle).requests.items;
+    count.* = @intCast(items.len);
+    return items.ptr;
+}
+
+export fn pl_lod_evicted(handle: *LodHandle, count: *u32) [*]const u32 {
+    const items = lodOf(handle).evicted.items;
+    count.* = @intCast(items.len);
+    return items.ptr;
+}
+
+export fn pl_lod_stats_get(handle: *LodHandle) lod.Stats {
+    return lodOf(handle).stats();
+}
+
 export fn pl_sun_direction(axial_tilt: f64, day_length: f64, year_length: f64, seconds: f64, out: *[3]f32) void {
     const s = sunFromOrbit(axial_tilt, day_length, year_length, seconds);
     for (0..3) |k| out[k] = @floatCast(s[k]);
@@ -531,7 +606,11 @@ export fn pl_sun_direction(axial_tilt: f64, day_length: f64, year_length: f64, s
 
 // Tests
 
-const earth: Params = .{
+test {
+    _ = lod;
+}
+
+pub const earth: Params = .{
     .seed = 42,
     .region_scale = 1,
 };

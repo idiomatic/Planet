@@ -28,6 +28,7 @@ Procedurally generated Earth-like planet viewer for macOS. Planned features: [DE
 ## Layout
 
 * [core/src/root.zig](core/src/root.zig): generation, simulation, C ABI, and tests
+* [core/src/lod.zig](core/src/lod.zig): level of detail (patch selection and the cache's bookkeeping) and its tests
 * [core/include/planet.h](core/include/planet.h): the C ABI, imported by Swift as a bridging header; its planet parameters (`pl_params`) are exactly the generation parameters, and everything live stays in the app
 * [app/Sources/](app/Sources/): SwiftUI app, Metal renderer, and shaders (compiled at runtime)
 * [app/Info.plist](app/Info.plist): bundle metadata
@@ -77,6 +78,7 @@ Exaggeration and sea level move the surface, so changing them refits the cached 
 
 * the renderer draws patches, not the coarse mesh: a patch is an icosphere triangle named by level (0–8), base face, and path, drawn as 4 more levels (a 256-triangle lattice), so the finest reach level 12 (~1.6 km)
 * the core generates a patch as a pure, thread-safe function of the planet's parameters and its name (`pl_patch_generate`), with the coarse mesh's midpoint normalizations, so shared vertices agree bit for bit; each vertex carries direction, elevation, tangential elevation gradient (exact, by the chain rule through the noise and warp, so a vertex shades alike in every patch), a skirt flag, and the elevation and gradient the parent patch shows there (its own at points the parent shares; the average of the parent edge's ends at edge midpoints)
+* selection and the cache's bookkeeping are the core's (`pl_lod_*`, not thread-safe): the app generates the patches it requests, owns their vertex buffers (lent to the core until it reports them evicted), and draws what it selects
 * each frame, selection starts at the 20 base faces, culls patches outside the frustum or behind the horizon, and refines a patch into its 4 children while its triangles would exceed 12 pixels
 * patches are cached between frames (least recently used beyond the patch cache setting are evicted; a new patch, and the arrived children of a parent still waiting for their siblings, count as used, or a full cache would evict them first and the parent would never refine); missing ones are generated on background threads (utility priority, at most cores − 2 at once, the largest on screen first; wanted patches are recomputed each frame, so passed-by ones are never started) while their parent is drawn; snapshots and benchmarks generate synchronously
 * LOD blending (geomorphing): the vertex shader blends each vertex from the parent's values to its own as the parent's triangles grow on screen from the split threshold to 1.5× it, so a patch matches its parent when it appears and is fully its own across the whole patch before it splits (ending at 2× pops, since a patch's far side lies ~15% farther than its near side); B or `--lod-blend on|off` toggles it (default on)

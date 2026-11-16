@@ -409,8 +409,8 @@ final class Renderer: NSObject, MTKViewDelegate {
                 Float(values.exposure))
         )
         let visible = patches.select(PatchView(
+            viewProjection: viewProjection,
             camera: position,
-            planes: Renderer.frustumPlanes(viewProjection),
             pixelsPerRadian: pixelsPerRadian
         ))
 
@@ -442,9 +442,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         encoder.endEncoding()
     }
 
-    private func draw(_ visible: [Patch], _ encoder: MTLRenderCommandEncoder, indexCount: Int) {
+    private func draw(_ visible: [PatchDraw], _ encoder: MTLRenderCommandEncoder, indexCount: Int) {
         for patch in visible {
-            var constants = SIMD2(patch.skirtDepth, patch.parentEdge)
+            var constants = patch.constants
             encoder.setVertexBuffer(patch.buffer, offset: 0, index: 0)
             encoder.setVertexBytes(&constants, length: MemoryLayout<SIMD2<Float>>.stride, index: 2)
             encoder.drawIndexedPrimitives(
@@ -455,14 +455,6 @@ final class Renderer: NSObject, MTKViewDelegate {
                 indexBufferOffset: 0
             )
         }
-    }
-
-    /// Left, right, bottom, top, and near planes of `m`'s frustum, pointing inward and
-    /// normalized (reverse-Z with an infinite far plane has no far plane).
-    private static func frustumPlanes(_ m: simd_float4x4) -> [SIMD4<Float>] {
-        func row(_ r: Int) -> SIMD4<Float> { SIMD4(m[0][r], m[1][r], m[2][r], m[3][r]) }
-        let (r0, r1, r2, r3) = (row(0), row(1), row(2), row(3))
-        return [r3 + r0, r3 - r0, r3 + r1, r3 - r1, r3 - r2].map { $0 / length(SIMD3($0.x, $0.y, $0.z)) }
     }
 
     /// Moves at a speed proportional to altitude, so approaching the surface slows down.

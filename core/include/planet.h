@@ -1,6 +1,7 @@
 #ifndef PLANET_H
 #define PLANET_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -43,6 +44,48 @@ void pl_patch_indices(uint32_t *out);        // shared by every patch
 // Pure and thread-safe.
 void pl_patch_generate(const pl_planet *planet, uint32_t level, uint32_t face, uint64_t path,
                        float *out);
+
+// Level of detail: chooses the patches to draw for a view and keeps the cache's bookkeeping.
+// The caller generates patches (pl_patch_generate) and owns their vertices: pl_lod_install
+// borrows them until their slot is reported evicted. Not thread-safe; use from one thread.
+typedef struct {
+    uint32_t level;
+    uint32_t face;
+    uint64_t path;
+} pl_patch_key;
+
+typedef struct {
+    uint32_t slot;
+    float skirt_depth; // radii
+    float parent_edge; // the parent's lattice triangle edge, radii (0 for a base face)
+} pl_lod_draw;
+
+typedef struct {
+    uint32_t visited; // cached patches the last selection used
+    uint32_t cached;
+    uint32_t pending; // requested, not yet installed or cancelled
+} pl_lod_stats;
+
+typedef struct pl_lod pl_lod;
+
+// `scale` is radii per meter of elevation (with exaggeration); `sea_level` is in meters.
+pl_lod *pl_lod_create(float scale, float sea_level);
+void pl_lod_destroy(pl_lod *lod);
+void pl_lod_set_surface(pl_lod *lod, float scale, float sea_level); // refits every patch
+void pl_lod_set_detail(pl_lod *lod, float target_pixels);
+void pl_lod_set_capacity(pl_lod *lod, uint32_t patches);
+// Returns the patch's slot, -1 if it's already cached, or -2 if out of memory.
+int64_t pl_lod_install(pl_lod *lod, pl_patch_key key, const float *vertices);
+void pl_lod_cancel(pl_lod *lod, pl_patch_key key); // a request that won't be installed
+// Selects for a view (column-major view-projection, reverse Z, no far plane): the patches to
+// draw, up to `max_in_flight` pending requests (most visible first), and evicted slots, each
+// valid until the next selection. Returns false if out of memory.
+bool pl_lod_select(pl_lod *lod, const float view_projection[16], const float camera[3],
+                   float pixels_per_radian, uint32_t max_in_flight);
+const pl_lod_draw *pl_lod_draws(pl_lod *lod, uint32_t *count);
+const pl_patch_key *pl_lod_requests(pl_lod *lod, uint32_t *count);
+const uint32_t *pl_lod_evicted(pl_lod *lod, uint32_t *count);
+pl_lod_stats pl_lod_stats_get(pl_lod *lod);
 
 // Unit vector toward the sun in the planet's frame, `seconds` after epoch.
 // A pure function of the orbit (tilt in degrees, day and year lengths relative to Earth's).

@@ -3,67 +3,25 @@ import QuartzCore
 import simd
 
 /// A patch's name: level, base face, and path (one child index, 0...3, per level).
-struct PatchKey: Hashable, Sendable {
-    var level: UInt32
-    var face: UInt32
-    var path: UInt64
-
-    var children: [PatchKey] {
-        (0..<4).map { PatchKey(level: level + 1, face: face, path: path * 4 + UInt64($0)) }
-    }
-}
-
-/// A generated patch on the GPU, with a bounding sphere in radii. The vertices don't depend on
-/// exaggeration (the shader displaces them), but the bounds and skirt do, so they're refit when
-/// it changes.
-final class Patch {
-    let buffer: MTLBuffer
-    let level: UInt32
-    private(set) var center = SIMD3<Float>.zero
-    private(set) var radius: Float = 0
-    /// How far the skirt hangs below the surface, in radii.
-    private(set) var skirtDepth: Float = 0
-    /// Edge of the parent's lattice triangles, in radii (0 for a base face, which has no parent).
-    let parentEdge: Float
-    var lastUsed = 0
-
-    init(buffer: MTLBuffer, level: UInt32, parentEdge: Float) {
-        self.buffer = buffer
-        self.level = level
-        self.parentEdge = parentEdge
-    }
-
-    /// Fits the bounds and skirt to `scale` (radii per meter of elevation).
-    func fit(scale: Float, seaLevel: Float, vertexCount: Int, floatsPerVertex: Int, triangleEdge: Float) {
-        let vertices = buffer.contents().bindMemory(to: Float.self, capacity: vertexCount * floatsPerVertex)
-        var lo = SIMD3<Float>(repeating: .infinity)
-        var hi = SIMD3<Float>(repeating: -.infinity)
-        func point(_ v: Int) -> SIMD3<Float> {
-            let f = v * floatsPerVertex
-            return SIMD3(vertices[f], vertices[f + 1], vertices[f + 2]) * (1 + scale * max(vertices[f + 3], seaLevel))
-        }
-        for v in 0..<vertexCount {
-            let p = point(v)
-            lo = simd_min(lo, p)
-            hi = simd_max(hi, p)
-        }
-        center = (lo + hi) / 2
-        radius = (0..<vertexCount).reduce(0) { max($0, length(point($1) - center)) }
-        skirtDepth = triangleEdge + scale * 500
-    }
-}
+typealias PatchKey = pl_patch_key
 
 /// What the camera sees, for choosing patches.
 struct PatchView {
+    var viewProjection: simd_float4x4
     var camera: SIMD3<Float>
-    /// Planes of the view frustum (left, right, bottom, top, near), pointing inward.
-    var planes: [SIMD4<Float>]
     var pixelsPerRadian: Float
 }
 
-/// Chooses patches for the view each frame, refining where their triangles would look large,
-/// and caches them between frames. Missing patches are generated in the background while their
-/// parent is drawn, or immediately when `synchronous`.
+/// A patch to draw: its vertices and the vertex shader's constants (skirt depth and the
+/// parent's triangle edge, in radii).
+struct PatchDraw {
+    var buffer: MTLBuffer
+    var constants: SIMD2<Float>
+}
+
+/// Keeps the patches' vertex buffers, generating them as the core's level of detail
+/// (`pl_lod_*`) requests: in the background while their parent is drawn, or immediately when
+/// `synchronous`. The core chooses what to draw and what to evict; this owns the buffers.
 @MainActor
 final class PatchCache {
     let indexBuffer: MTLBuffer
@@ -73,139 +31,111 @@ final class PatchCache {
 
     /// Most bytes of patches kept; least recently used ones beyond this are evicted (on the next
     /// selection, so shrinking applies as soon as the view redraws).
-    var capacityBytes = 40_000_000
+    var capacityBytes = 40_000_000 {
+        didSet { pl_lod_set_capacity(lod, UInt32(max(capacityBytes / patchBytes, 1))) }
+    }
     /// Bytes per patch: its vertices (its share of the index buffer is shared by all).
     var patchBytes: Int { vertexCount * Self.floatsPerVertex * MemoryLayout<Float>.stride }
-    private var capacity: Int { max(capacityBytes / patchBytes, 1) }
     /// Triangle edge, in pixels, above which a patch is refined.
-    var targetPixels: Float = 12
+    var targetPixels: Float = 12 {
+        didSet { pl_lod_set_detail(lod, targetPixels) }
+    }
+    /// Radii per meter of elevation, with exaggeration; changing it refits every cached patch.
+    var scale: Float {
+        didSet { if scale != oldValue { pl_lod_set_surface(lod, scale, seaLevel) } }
+    }
+    /// Sea level in meters; oceans sit at it, so changing it also refits every cached patch.
+    var seaLevel: Float {
+        didSet { if seaLevel != oldValue { pl_lod_set_surface(lod, scale, seaLevel) } }
+    }
 
     private(set) var drawn = 0
     /// Cached patches the last selection used (hits); generated ones were misses.
     private(set) var visited = 0
     private(set) var generatedThisFrame = 0
     private(set) var generationSeconds = 0.0
-    var cachedCount: Int { patches.count }
-    var cachedBytes: Int { patches.count * patchBytes }
+    var cachedCount: Int { Int(pl_lod_stats_get(lod).cached) }
+    var cachedBytes: Int { cachedCount * patchBytes }
 
     private let planet: Planet
     private let device: MTLDevice
-    private let maxLevel: UInt32
     private let vertexCount: Int
-    /// Radii per meter of elevation, with exaggeration; changing it refits every cached patch.
-    var scale: Float {
-        didSet { if scale != oldValue { patches.values.forEach(fit) } }
-    }
-    /// Sea level in meters; oceans sit at it, so changing it also refits every cached patch.
-    var seaLevel: Float {
-        didSet { if seaLevel != oldValue { patches.values.forEach(fit) } }
-    }
-    private var patches: [PatchKey: Patch] = [:]
-    private var pending: Set<PatchKey> = []
-    /// Patches this selection wanted but lacked, with their parent's triangle size on screen.
-    private var wanted: [(pixels: Float, key: PatchKey)] = []
+    /// The core's level of detail; destroyed in `deinit`, when nothing else can reach it.
+    nonisolated(unsafe) private let lod: OpaquePointer
+    /// Vertex buffers by the core's slot; the core borrows their contents until it evicts them.
+    private var buffers: [MTLBuffer?] = []
     /// Leaves two cores for the main thread and the window server.
     private let maxInFlight = max(ProcessInfo.processInfo.activeProcessorCount - 2, 2)
-    private var frame = 0
 
     /// Called when a background patch arrives, so the view can draw it.
     var onInstall: (() -> Void)?
 
     nonisolated private static let floatsPerVertex = 12
-    private static let roots = (0..<20).map { PatchKey(level: 0, face: UInt32($0), path: 0) }
 
     init?(planet: Planet, device: MTLDevice, scale: Float, seaLevel: Float) {
         let indexCount = Int(pl_patch_index_count())
         var indices = [UInt32](repeating: 0, count: indexCount)
         pl_patch_indices(&indices)
         guard let indexBuffer = device.makeBuffer(
-            bytes: indices, length: indexCount * MemoryLayout<UInt32>.stride, options: .storageModeShared)
+            bytes: indices, length: indexCount * MemoryLayout<UInt32>.stride, options: .storageModeShared),
+            let lod = pl_lod_create(scale, seaLevel)
         else { return nil }
         self.indexBuffer = indexBuffer
         self.indexCount = indexCount
         self.surfaceIndexCount = Int(pl_patch_surface_index_count())
         self.vertexCount = Int(pl_patch_vertex_count())
-        self.maxLevel = pl_patch_max_level()
         self.planet = planet
         self.device = device
         self.scale = scale
         self.seaLevel = seaLevel
-        for key in Self.roots { install(key, Self.vertices(planet, key)) }
+        self.lod = lod
+        pl_lod_set_capacity(lod, UInt32(max(capacityBytes / patchBytes, 1)))
+        for face in 0..<UInt32(20) {
+            let key = PatchKey(level: 0, face: face, path: 0)
+            install(key, Self.vertices(planet, key))
+        }
     }
 
-    /// Patches to draw for `view`, coarsest that look fine; evicts stale ones.
-    func select(_ view: PatchView) -> [Patch] {
-        frame += 1
+    deinit {
+        pl_lod_destroy(lod)
+    }
+
+    /// Patches to draw for `view`, coarsest that look fine; requests missing ones and releases
+    /// evicted ones. When synchronous, generates what's missing until none is.
+    func select(_ view: PatchView) -> [PatchDraw] {
         generatedThisFrame = 0
-        visited = 0
-        wanted.removeAll(keepingCapacity: true)
-        var list: [Patch] = []
-        for key in Self.roots { visit(key, view, &list) }
-        drawn = list.count
-        // Generate the most visible missing patches first. Requests are rebuilt each frame,
-        // so a patch the camera has passed is never generated; only those in flight may be.
-        for (_, key) in wanted.sorted(by: { $0.pixels > $1.pixels }) where pending.count < maxInFlight {
-            request(key)
-        }
-        evict()
-        return list
-    }
-
-    private func visit(_ key: PatchKey, _ view: PatchView, _ list: inout [Patch]) {
-        guard let patch = patches[key] else { return }
-        patch.lastUsed = frame
-        visited += 1
-        if culled(patch, view) { return }
-        if key.level < maxLevel, let pixels = refinementPixels(key, patch, view) {
-            let children = key.children
-            var missing = children.filter { patches[$0] == nil }
-            if synchronous {
-                for child in missing {
-                    let start = CACurrentMediaTime()
-                    let vertices = Self.vertices(planet, child)
-                    generationSeconds += CACurrentMediaTime() - start
-                    install(child, vertices)
-                }
-                missing = []
-            } else {
-                for child in missing where !pending.contains(child) { wanted.append((pixels, child)) }
-                // Keep the children that have arrived while their siblings are generated: evicting
-                // them as unused would leave the parent waiting forever once the cache is full.
-                if !missing.isEmpty { for child in children { patches[child]?.lastUsed = frame } }
+        var camera = [view.camera.x, view.camera.y, view.camera.z]
+        var matrix = view.viewProjection
+        while true {
+            let selected = withUnsafeBytes(of: &matrix) {
+                pl_lod_select(
+                    lod, $0.baseAddress!.assumingMemoryBound(to: Float.self), &camera, view.pixelsPerRadian,
+                    synchronous ? .max : UInt32(maxInFlight))
             }
-            if missing.isEmpty {
-                for child in children { visit(child, view, &list) }
-                return
+            guard selected else { return [] }
+            for slot in Self.items(pl_lod_evicted, lod) { buffers[Int(slot)] = nil }
+            let requests = Self.items(pl_lod_requests, lod)
+            if !synchronous {
+                requests.forEach(request)
+                break
+            }
+            if requests.isEmpty { break }
+            for key in requests {
+                let start = CACurrentMediaTime()
+                let vertices = Self.vertices(planet, key)
+                generationSeconds += CACurrentMediaTime() - start
+                install(key, vertices)
             }
         }
-        list.append(patch)
-    }
-
-    /// The patch's triangle size on screen, in pixels, if it's above `targetPixels`.
-    private func refinementPixels(_ key: PatchKey, _ patch: Patch, _ view: PatchView) -> Float? {
-        let distance = max(length(view.camera - patch.center) - patch.radius, 1e-7)
-        let pixels = Self.triangleEdge(key.level) / distance * view.pixelsPerRadian
-        return pixels > targetPixels ? pixels : nil
-    }
-
-    private func culled(_ patch: Patch, _ view: PatchView) -> Bool {
-        for plane in view.planes where dot(SIMD3(plane.x, plane.y, plane.z), patch.center) + plane.w < -patch.radius {
-            return true
+        visited = Int(pl_lod_stats_get(lod).visited)
+        let draws = Self.items(pl_lod_draws, lod).compactMap { draw in
+            buffers[Int(draw.slot)].map { PatchDraw(buffer: $0, constants: SIMD2(draw.skirt_depth, draw.parent_edge)) }
         }
-        // Behind the horizon of the lowest surface (sea level, or the deepest land below it).
-        let occluder = min(1, 1 + scale * seaLevel) * 0.999
-        let d = length(view.camera)
-        let c = length(patch.center)
-        guard d > occluder, c > 0 else { return false }
-        let angle = acos(min(max(dot(view.camera / d, patch.center / c), -1), 1))
-        let extent = asin(min(patch.radius / c, 1))
-        let horizon = acos(occluder / d) + acos(min(occluder / (c + patch.radius), 1))
-        return angle - extent > horizon
+        drawn = draws.count
+        return draws
     }
 
     private func request(_ key: PatchKey) {
-        guard !pending.contains(key), pending.count < maxInFlight else { return }
-        pending.insert(key)
         let planet = planet
         Task.detached(priority: .utility) {
             let vertices = Self.vertices(planet, key)
@@ -214,37 +144,27 @@ final class PatchCache {
     }
 
     private func install(_ key: PatchKey, _ vertices: [Float]) {
-        pending.remove(key)
-        guard patches[key] == nil,
-              let buffer = device.makeBuffer(
-                  bytes: vertices, length: vertices.count * MemoryLayout<Float>.stride, options: .storageModeShared)
-        else { return }
+        guard let buffer = device.makeBuffer(
+            bytes: vertices, length: vertices.count * MemoryLayout<Float>.stride, options: .storageModeShared)
+        else {
+            pl_lod_cancel(lod, key)
+            return
+        }
+        let slot = pl_lod_install(lod, key, buffer.contents().assumingMemoryBound(to: Float.self))
+        guard slot >= 0 else { return } // already cached, or out of memory
+        if slot >= buffers.count { buffers.append(contentsOf: repeatElement(nil, count: Int(slot) + 1 - buffers.count)) }
+        buffers[Int(slot)] = buffer
         generatedThisFrame += 1
-        let patch = Patch(
-            buffer: buffer, level: key.level, parentEdge: key.level > 0 ? 2 * Self.triangleEdge(key.level) : 0)
-        fit(patch)
-        patch.lastUsed = frame // new, not least recently used
-        patches[key] = patch
         onInstall?()
     }
 
-    private func fit(_ patch: Patch) {
-        patch.fit(
-            scale: scale, seaLevel: seaLevel, vertexCount: vertexCount,
-            floatsPerVertex: Self.floatsPerVertex, triangleEdge: Self.triangleEdge(patch.level))
-    }
-
-    private func evict() {
-        guard patches.count > capacity else { return }
-        let stale = patches
-            .filter { $0.key.level > 0 && $0.value.lastUsed < frame }
-            .sorted { $0.value.lastUsed < $1.value.lastUsed }
-        for (key, _) in stale.prefix(patches.count - capacity) { patches[key] = nil }
-    }
-
-    /// Edge of a patch's lattice triangles, in radii (the icosahedron's edge is ~1.05).
-    private static func triangleEdge(_ level: UInt32) -> Float {
-        1.05 / Float(1 << (Int(level) + 4))
+    /// One of the core's per-selection lists, copied out.
+    private static func items<T>(
+        _ list: (OpaquePointer?, UnsafeMutablePointer<UInt32>?) -> UnsafePointer<T>?, _ lod: OpaquePointer
+    ) -> [T] {
+        var count: UInt32 = 0
+        guard let items = list(lod, &count) else { return [] }
+        return Array(UnsafeBufferPointer(start: items, count: Int(count)))
     }
 
     nonisolated private static func vertices(_ planet: Planet, _ key: PatchKey) -> [Float] {
