@@ -146,9 +146,12 @@ final class PatchCache {
 
     private func request(_ key: PatchKey) {
         let planet = planet
-        Task.detached(priority: .utility) {
+        // The parent's vertices, copied now: it may be evicted before the task runs.
+        var parent: [Float]? = [Float](repeating: 0, count: Int(pl_patch_float_count()))
+        if !pl_lod_parent_vertices(lod, key, &parent!) { parent = nil }
+        Task.detached(priority: .utility) { [parent] in
             var vertices = [Float](repeating: 0, count: Int(pl_patch_float_count()))
-            planet.generatePatch(key, into: &vertices)
+            planet.generatePatch(key, parent: parent, into: &vertices)
             await self.install(key, vertices)
         }
     }

@@ -48,6 +48,10 @@ CPU use was cut by drawing only when something changes and by computing the elev
 
 Flying still draws at up to 120 fps and generates patches; the rest of its cost is noise, which midpoint displacement (planned) would mostly replace.
 
+## Reusing the parent's vertices
+
+Every other lattice point of a patch is one of its parent's vertices (45 of 153 surface points), and shared vertices agree bit for bit, so generating a patch from its cached parent copies those instead of computing them. Measured directly, generation fell from 0.071 to 0.051 ms per patch (28%) with identical output; in the benchmark, the cold pass's generation fell from 636 to 414 ms and its CPU time from 800 to 562 ms. Sharing hash work between a noise sample's corners was also tried, and gained under 2%: the compiler already shares most of it.
+
 ## LOD blending
 
 LOD blending costs no measurable GPU time (0.616 vs. 0.612 ms per frame) and 16 bytes per vertex for the parent's values. To measure popping, 80 snapshots approaching the highest peak (30× relief, 640×400) were compared frame to frame; a pop is a frame whose change departs from the average of its neighbors' by more than 0.2 (on a 0–255 scale):

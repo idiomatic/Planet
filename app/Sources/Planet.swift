@@ -56,8 +56,13 @@ final class Planet: @unchecked Sendable {
         pl_planet_surface(handle, view.exaggeration, view.seaLevel)
     }
 
-    /// Writes the patch's vertices; `out` holds pl_patch_float_count() floats.
-    func generatePatch(_ key: PatchKey, into out: inout [Float]) {
-        pl_patch_generate(handle, key.level, key.face, key.path, &out)
+    /// Writes the patch's vertices; `out` holds pl_patch_float_count() floats. Given its
+    /// parent's vertices, it copies the points they share instead of computing them.
+    func generatePatch(_ key: PatchKey, parent: [Float]?, into out: inout [Float]) {
+        if let parent {
+            parent.withUnsafeBufferPointer { pl_patch_generate(handle, key.level, key.face, key.path, $0.baseAddress, &out) }
+        } else {
+            pl_patch_generate(handle, key.level, key.face, key.path, nil, &out)
+        }
     }
 }

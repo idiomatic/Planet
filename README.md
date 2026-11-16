@@ -97,7 +97,7 @@ Planet aims to fly smoothly at full detail on a base M1 and to use no power when
 
 * **Detail only where it's seen.** A full-resolution planet (168 million vertices) wouldn't fit in an 8 GB Mac's memory, so only a coarse mesh (~105 km triangles) is stored. Finer patches, down to ~1.6 km triangles, are generated around the camera, refined by their size on screen, and culled outside the view or behind the horizon.
 * **Generation off the main thread.** Missing patches are generated on background threads, largest on screen first, while their parent stays drawn; a cache keeps them between frames (40 MB, about 4,100 patches, by default; adjustable while flying).
-* **Cheap generation.** The terrain's slope is computed exactly alongside its height, instead of by sampling the height five times, so a patch takes 0.07 ms (3.8× faster).
+* **Cheap generation.** The terrain's slope is computed exactly alongside its height, instead of by sampling the height five times, and a patch copies the points it shares with its parent instead of recomputing them, so a patch takes 0.05 ms (5× faster than at first).
 * **Drawing only on change.** Frames are drawn only while something moves (up to 120 fps while flying, 30 fps while time runs); idle with time paused uses no CPU.
 * **Smooth transitions for free.** LOD blending eases each new patch in from its parent's shape, removing popping at no measurable GPU cost.
 

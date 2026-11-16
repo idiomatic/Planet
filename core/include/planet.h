@@ -49,8 +49,10 @@ void pl_patch_indices(uint32_t *out);        // shared by every patch
 // meters, tangential elevation gradient in meters per radian (3), skirt (0 or 1), and the
 // elevation (1) and gradient (3) the parent patch shows there, for blending between levels.
 // Pure and thread-safe.
+// Given its parent's vertices (or NULL), copies the points they share (every other lattice
+// point) instead of computing them, with the same result for about 30% less work.
 void pl_patch_generate(const pl_planet *planet, uint32_t level, uint32_t face, uint64_t path,
-                       float *out);
+                       const float *parent, float *out);
 
 // Level of detail: chooses the patches to draw for a view and keeps the cache's bookkeeping.
 // The caller lends vertex storage per slot (pl_lod_storage) and generates requested patches
@@ -105,6 +107,9 @@ int64_t pl_lod_install(pl_lod *lod, pl_patch_key key, const float *vertices);
 // next selection. Evicts beyond the capacity. Returns false if out of memory or storage.
 bool pl_lod_select(pl_lod *lod, const float view_projection[16], const float camera[3],
                    float pixels_per_radian, uint32_t max_in_flight, bool synchronous);
+// Copies the cached parent's vertices (pl_patch_float_count() floats) to generate `key` from
+// on another thread; false if its parent isn't cached.
+bool pl_lod_parent_vertices(pl_lod *lod, pl_patch_key key, float *out);
 const pl_lod_draw *pl_lod_draws(pl_lod *lod, uint32_t *count);
 const pl_patch_key *pl_lod_requests(pl_lod *lod, uint32_t *count);
 pl_lod_stats pl_lod_stats_get(pl_lod *lod);

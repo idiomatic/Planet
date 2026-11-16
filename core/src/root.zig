@@ -287,6 +287,18 @@ pub const patch_indices = patch_surface_indices + 3 * 6 * patch_n;
 /// elevation (1) and gradient (3) the parent patch shows there, for blending between levels.
 pub const patch_vertex_floats = 12;
 
+/// The parent's lattice point at the child's (2i, 2j), for the child (0...3) as `patchPoints`
+/// orders them: (a, ab, ca), (ab, b, bc), (ca, bc, c), and (ab, bc, ca).
+fn parentLattice(child: u64, i: usize, j: usize) [2]usize {
+    const h = patch_n / 2;
+    return switch (child) {
+        0 => .{ i, j },
+        1 => .{ h + i, j },
+        2 => .{ i, h + j },
+        else => .{ h - j, i + j },
+    };
+}
+
 /// Lattice point (i, j), with i + j ≤ n, at corner a + i/n·(b − a) + j/n·(c − a).
 fn latticeIndex(i: usize, j: usize) usize {
     return j * (patch_n + 1) - (j * j - j) / 2 + i;
@@ -348,12 +360,31 @@ fn edgeEnds(i: usize, j: usize, step: usize) ?[2]usize {
 /// Writes a patch's vertices (`patch_vertices` × `patch_vertex_floats`): the surface lattice,
 /// then each edge again as the skirt's lower edge. Pure in (params, level, face, path).
 pub fn generatePatch(p: Params, level: u5, face: u5, path: u64, out: []f32) void {
+    generatePatchFrom(p, level, face, path, null, out);
+}
+
+/// Like `generatePatch`, but copies the points it shares with its parent (every other lattice
+/// point: 45 of 153) from the parent's vertices, when given, instead of computing them. Shared
+/// points agree bit for bit, so the result is the same, for about 30% less work.
+pub fn generatePatchFrom(p: Params, level: u5, face: u5, path: u64, parent: ?[]const f32, out: []f32) void {
     const points = patchPoints(level, face, path);
-    for (points, 0..) |point, v| writePatchVertex(p, point, 0, out[v * patch_vertex_floats ..]);
+    const f = patch_vertex_floats;
+    for (0..patch_n + 1) |j| {
+        for (0..patch_n + 1 - j) |i| {
+            const v = latticeIndex(i, j);
+            if (parent) |from| {
+                if (level > 0 and i % 2 == 0 and j % 2 == 0) {
+                    const at = parentLattice(path & 3, i / 2, j / 2);
+                    @memcpy(out[v * f ..][0..8], from[latticeIndex(at[0], at[1]) * f ..][0..8]);
+                    continue;
+                }
+            }
+            writePatchVertex(p, points[v], 0, out[v * f ..]);
+        }
+    }
 
     // The parent's lattice is this one's at spacing 2, with the same triangles, so the parent
     // shows a point it shares as is, and an edge midpoint as the average of the edge's ends.
-    const f = patch_vertex_floats;
     for (0..patch_surface_vertices) |v| @memcpy(out[v * f + 8 ..][0..4], out[v * f + 3 ..][0..4]);
     for (0..patch_n + 1) |j| {
         for (0..patch_n + 1 - j) |i| {
@@ -616,9 +647,10 @@ export fn pl_patch_indices(out: [*]u32) void {
 }
 
 /// Thread-safe: reads only the planet's immutable parameters.
-export fn pl_patch_generate(handle: *const Handle, level: u32, face: u32, path: u64, out: [*]f32) void {
+export fn pl_patch_generate(handle: *const Handle, level: u32, face: u32, path: u64, parent: ?[*]const f32, out: [*]f32) void {
     const planet = planetOf(handle);
-    generatePatch(planet.params, @intCast(level), @intCast(face), path, out[0 .. patch_vertices * patch_vertex_floats]);
+    const from: ?[]const f32 = if (parent) |v| v[0..lod.patch_floats] else null;
+    generatePatchFrom(planet.params, @intCast(level), @intCast(face), path, from, out[0..lod.patch_floats]);
 }
 
 const LodHandle = opaque {};
@@ -671,6 +703,13 @@ export fn pl_lod_select(
     synchronous: bool,
 ) bool {
     lodOf(handle).select(view_projection, camera.*, pixels_per_radian, max_in_flight, synchronous) catch return false;
+    return true;
+}
+
+/// Copies the cached parent's vertices, to generate `key` from elsewhere; false if there's none.
+export fn pl_lod_parent_vertices(handle: *LodHandle, key: lod.Key, out: [*]f32) bool {
+    const parent = lodOf(handle).parentVertices(key) orelse return false;
+    @memcpy(out[0..lod.patch_floats], parent[0..lod.patch_floats]);
     return true;
 }
 
@@ -835,6 +874,20 @@ test "a child's parent values match the parent wherever they share a point" {
         }
         // The child's even lattice points: (n/2 + 1)(n/2 + 2)/2 of them.
         try std.testing.expectEqual(@as(usize, (patch_n / 2 + 1) * (patch_n / 2 + 2) / 2), shared);
+    }
+}
+
+test "a patch generated from its parent's vertices matches one generated alone, bit for bit" {
+    var parent: [lod.patch_floats]f32 = undefined;
+    var alone: [lod.patch_floats]f32 = undefined;
+    var from: [lod.patch_floats]f32 = undefined;
+    for ([_]u64{ 0b10_01, 0b00_11, 0b11_10 }) |path| {
+        generatePatch(earth, 2, 9, path, &parent);
+        for (0..4) |c| {
+            generatePatch(earth, 3, 9, path * 4 + c, &alone);
+            generatePatchFrom(earth, 3, 9, path * 4 + c, &parent, &from);
+            try std.testing.expectEqualSlices(u32, @ptrCast(&alone), @ptrCast(&from));
+        }
     }
 }
 

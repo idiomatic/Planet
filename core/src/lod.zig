@@ -158,6 +158,13 @@ pub const Lod = struct {
         _ = try self.place(key, null);
     }
 
+    /// The cached parent's vertices, if any, to generate a child from.
+    pub fn parentVertices(self: *const Lod, key: Key) ?[*]const f32 {
+        if (key.level == 0) return null;
+        const slot = self.index.get(.{ .level = key.level - 1, .face = key.face, .path = key.path >> 2 }) orelse return null;
+        return self.slots.items(.vertices)[slot];
+    }
+
     /// Takes a slot and its storage, fills it (copying `vertices`, or generating them), and
     /// caches the patch there.
     fn place(self: *Lod, key: Key, vertices: ?[]const f32) InstallError!u32 {
@@ -176,7 +183,8 @@ pub const Lod = struct {
             @memcpy(out[0..patch_floats], v[0..patch_floats]);
         } else {
             const start = now();
-            core.generatePatch(self.params, @intCast(key.level), @intCast(key.face), key.path, out[0..patch_floats]);
+            const parent: ?[]const f32 = if (self.parentVertices(key)) |v| v[0..patch_floats] else null;
+            core.generatePatchFrom(self.params, @intCast(key.level), @intCast(key.face), key.path, parent, out[0..patch_floats]);
             self.generation_ns += now() - start;
         }
         self.slots.set(slot, .{
