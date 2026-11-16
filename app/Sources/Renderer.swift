@@ -88,6 +88,11 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     private let skyPipeline: MTLRenderPipelineState
     private let skyDepthState: MTLDepthStencilState
+    /// Sunlight's optical depth through the air (see `transmittanceKernel`), rebuilt when the
+    /// radius of the planet the air sees changes, with relief.
+    private let transmittancePipeline: MTLComputePipelineState
+    private let transmittance: MTLTexture
+    private var transmittanceRadius: Float = 0
 
     init?(planet: Planet, settings: ViewSettings) {
         guard let device = MTLCreateSystemDefaultDevice(),
@@ -120,6 +125,15 @@ final class Renderer: NSObject, MTKViewDelegate {
               let skyDepthState = device.makeDepthStencilState(descriptor: skyDepth)
         else { return nil }
 
+        let table = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rg32Float, width: 256, height: 64, mipmapped: false)
+        table.usage = [.shaderRead, .shaderWrite]
+        table.storageMode = .private
+        guard let kernel = library.makeFunction(name: "transmittanceKernel"),
+              let transmittancePipeline = try? device.makeComputePipelineState(function: kernel),
+              let transmittance = device.makeTexture(descriptor: table)
+        else { return nil }
+
         let values = settings.values
         let surface = planet.surface(values)
         guard let patches = PatchCache(
@@ -135,6 +149,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         self.depthState = depthState
         self.skyPipeline = skyPipeline
         self.skyDepthState = skyDepthState
+        self.transmittancePipeline = transmittancePipeline
+        self.transmittance = transmittance
         self.patches = patches
         self.settings = settings
         self.applied = values
@@ -378,7 +394,20 @@ final class Renderer: NSObject, MTKViewDelegate {
     }
 
     private func encode(_ commands: MTLCommandBuffer, _ pass: MTLRenderPassDescriptor) {
+        let airRadius = surface.air_planet_radius
+        if airRadius != transmittanceRadius, let compute = commands.makeComputeCommandEncoder() {
+            var radius = airRadius
+            compute.setComputePipelineState(transmittancePipeline)
+            compute.setTexture(transmittance, index: 0)
+            compute.setBytes(&radius, length: MemoryLayout<Float>.stride, index: 0)
+            compute.dispatchThreads(
+                MTLSize(width: transmittance.width, height: transmittance.height, depth: 1),
+                threadsPerThreadgroup: MTLSize(width: 16, height: 16, depth: 1))
+            compute.endEncoding()
+            transmittanceRadius = airRadius
+        }
         guard let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
+        encoder.setFragmentTexture(transmittance, index: 0)
         let altitude = length(position) - floorRadius
         let fovY = Float(values.fieldOfView * .pi / 180)
         let projection = simd_float4x4(perspectiveFovY: fovY, aspect: aspect, near: max(altitude * 0.5, 1e-6))

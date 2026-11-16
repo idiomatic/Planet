@@ -34,7 +34,9 @@ The benchmark and video loops render frame after frame without returning to the 
 
 ## Atmosphere
 
-With the atmosphere, the GPU frame rises from about 0.68 to 4.7 ms on the same path (frames from the cache: 1.0 to 3.2–4.5 ms, CPU and GPU), mostly the per-pixel raymarch (12 view steps × 6 sun steps for terrain, 32 × 6 for the sky). A precomputed transmittance table would remove most of the sun steps.
+With the atmosphere, the GPU frame rises from about 0.68 to 4.7 ms on the same path (frames from the cache: 1.0 to 3.2–4.5 ms, CPU and GPU), mostly the per-pixel raymarch (12 view steps × 6 sun steps for terrain, 32 × 6 for the sky).
+
+A transmittance table now replaces the sun steps: sunlight's optical depth by height and sun angle (256×64, 64 steps per texel, rebuilt only when relief changes the radius the air sees), one lookup per view step. The atmosphere's cost fell about 1.7× (a 10-second 1080p video's atmosphere share, air on minus air off, from 8.4 to 5.0 s; the best warm-pass GPU frame from 5.8 to 3.4 ms). GPU timings on this Mac varied by over 40% between identical runs (the GPU's clocks follow the load), so these are the steadiest of repeated runs. Renders change slightly, from the table's interpolation and its more accurate integration: against the old renders, PSNR 49–58 dB and SSIM ≥ 0.997, with night views identical. What remains is the view rays' own steps; a sky-view or aerial-perspective table (Hillaire 2020) would be the next step.
 
 ## CPU use
 
