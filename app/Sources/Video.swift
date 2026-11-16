@@ -59,7 +59,7 @@ enum Video {
         guard writer.startWriting() else { fail("start: \(writer.error?.localizedDescription ?? "")") }
         writer.startSession(atSourceTime: .zero)
 
-        let flight = LoopingFlight(planet: planet, view: options.view, floor: renderer.floorRadius)
+        let flight = LoopingFlight(planet: planet, view: options.view, floor: renderer.globalFloorRadius)
         let start = Date()
         for i in 0..<frames {
             // Drained each frame: this loop never returns to the run loop, which would, so

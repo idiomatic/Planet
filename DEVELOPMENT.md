@@ -14,7 +14,8 @@
 
 * detail field: a deterministic function of (seed, vertex address), independent of the camera's path, that feeds fine terrain (patches now get fine detail from the placeholder's extra noise octaves instead)
 * the detail field is applied as midpoint displacement, since raw hashes are white noise: each new vertex starts at the average of its parent edge's endpoints, offset by an amplitude that shrinks with each finer level
-* the camera's floor follows the local surface rather than the planet's highest point
+* below ~25 m, camera-relative rendering (each patch's vertices relative to its center, offsets from the camera in double precision), since single precision at radius 1 resolves only ~0.4 m
+* below ~50 m, the detail field (above) instead of more octaves, so a vertex costs the same at any depth; shading there would come from the lattice's neighbors rather than an exact gradient, which relaxes a vertex shading alike in every patch
 
 ## Orbit
 

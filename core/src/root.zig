@@ -112,6 +112,15 @@ pub const Planet = struct {
         };
     }
 
+    /// The surface in `direction`, in radii: the elevation there (or the sea, if higher), as the
+    /// view shows it. The drawn mesh departs from it between vertices, by about a meter at the
+    /// finest level.
+    pub fn groundAt(self: *const Planet, exaggeration: f64, sea_level: f64, direction: Vec) f32 {
+        const s = self.surface(exaggeration, sea_level);
+        const ground: f32 = @floatCast(elevation(self.params, normalize(direction)));
+        return 1 + s.scale * @max(ground, s.sea_level);
+    }
+
     /// The coarse mesh's highest vertex, on the unit sphere (the first, on a tie).
     pub fn peak(self: *const Planet) [3]f32 {
         var best: usize = 0;
@@ -275,7 +284,9 @@ const Mesh = struct {
 /// A patch is a triangle of the subdivided icosahedron, named by level, base face, and path
 /// (one child index, 0...3, per level), drawn as `patch_subdivisions` more levels of triangles.
 pub const patch_subdivisions = 4;
-pub const max_patch_level = 12 - patch_subdivisions;
+/// The finest level drawn: triangles of about 100 m at Earth's radius.
+pub const finest_level = 16;
+pub const max_patch_level = finest_level - patch_subdivisions;
 const patch_n = 1 << patch_subdivisions; // lattice intervals per patch edge
 const patch_surface_vertices = (patch_n + 1) * (patch_n + 2) / 2;
 const patch_skirt_vertices = 3 * (patch_n + 1);
@@ -469,9 +480,9 @@ fn normalize(v: Vec) Vec {
     return .{ v[0] / n, v[1] / n, v[2] / n };
 }
 
-/// Octaves of the placeholder elevation: its finest wavelength (~1 km at Earth's radius) suits
+/// Octaves of the placeholder elevation: its finest wavelength (~60 m at Earth's radius) suits
 /// the finest patches. Fixed, so a point's elevation doesn't depend on which patch asks.
-const elevation_octaves = 13;
+const elevation_octaves = 17;
 
 /// A noise value and its gradient with respect to the sample point.
 const Sample = struct { value: f64, gradient: Vec };
@@ -612,6 +623,11 @@ export fn pl_planet_vertex_count(handle: *const Handle) u32 {
 
 export fn pl_planet_surface(handle: *const Handle, exaggeration: f64, sea_level: f64) Surface {
     return planetOf(handle).surface(exaggeration, sea_level);
+}
+
+export fn pl_planet_ground_at(handle: *const Handle, exaggeration: f64, sea_level: f64, direction: *const [3]f32) f32 {
+    const d: Vec = .{ direction[0], direction[1], direction[2] };
+    return planetOf(handle).groundAt(exaggeration, sea_level, d);
 }
 
 export fn pl_planet_peak(handle: *const Handle, out: *[3]f32) void {
@@ -839,11 +855,17 @@ test "patches at the coarse level reproduce the coarse mesh's vertices exactly" 
 }
 
 test "sibling patches agree bit for bit along shared edges" {
+    // Children 0 (a, ab, ca) and 3 (ab, bc, ca) share the edge ab–ca; near the top and at the
+    // deepest level.
+    try expectSiblingsAgree(3, 0b01_10);
+    try expectSiblingsAgree(max_patch_level, 0x2c_3a9b);
+}
+
+fn expectSiblingsAgree(level: u5, parent_path: u64) !void {
     var a: [patch_vertices * patch_vertex_floats]f32 = undefined;
     var b: [patch_vertices * patch_vertex_floats]f32 = undefined;
-    // Children 0 (a, ab, ca) and 3 (ab, bc, ca) share the edge ab–ca.
-    generatePatch(earth, 3, 7, 0b01_10_00, &a);
-    generatePatch(earth, 3, 7, 0b01_10_11, &b);
+    generatePatch(earth, level, 7, parent_path * 4 + 0, &a);
+    generatePatch(earth, level, 7, parent_path * 4 + 3, &b);
     var shared: usize = 0;
     for (0..patch_surface_vertices) |u| {
         for (0..patch_surface_vertices) |v| {
@@ -884,11 +906,17 @@ test "a patch generated from its parent's vertices matches one generated alone, 
     var parent: [lod.patch_floats]f32 = undefined;
     var alone: [lod.patch_floats]f32 = undefined;
     var from: [lod.patch_floats]f32 = undefined;
-    for ([_]u64{ 0b10_01, 0b00_11, 0b11_10 }) |path| {
-        generatePatch(earth, 2, 9, path, &parent);
+    const cases = [_]struct { level: u5, path: u64 }{
+        .{ .level = 3, .path = 0b10_01 },
+        .{ .level = 3, .path = 0b00_11 },
+        .{ .level = 3, .path = 0b11_10 },
+        .{ .level = max_patch_level, .path = 0x2c_3a9b }, // the deepest
+    };
+    for (cases) |case| {
+        generatePatch(earth, case.level - 1, 9, case.path, &parent);
         for (0..4) |c| {
-            generatePatch(earth, 3, 9, path * 4 + c, &alone);
-            generatePatchFrom(earth, 3, 9, path * 4 + c, &parent, &from);
+            generatePatch(earth, case.level, 9, case.path * 4 + c, &alone);
+            generatePatchFrom(earth, case.level, 9, case.path * 4 + c, &parent, &from);
             try std.testing.expectEqualSlices(u32, @ptrCast(&alone), @ptrCast(&from));
         }
     }
@@ -900,7 +928,7 @@ test "the exact elevation gradient matches finite differences" {
     for (0..200) |_| {
         const point = normalize(.{ random.float(f64) - 0.5, random.float(f64) - 0.5, random.float(f64) - 0.5 });
         const exact = elevationWithGradient(earth, point).gradient;
-        const h = 1e-7;
+        const h = 1e-9; // well under the finest wavelength (~1e-5 radii)
         for (0..3) |k| {
             var plus = point;
             var minus = point;
@@ -939,6 +967,27 @@ test "the surface scales with relief, but the air not below Earth's" {
     try std.testing.expectApproxEqRel(real.air_planet_radius / 50, tall.air_planet_radius, 1e-6);
     try std.testing.expectEqual(planet.min_elevation, planet.surface(100, 0).sea_level);
     try std.testing.expectApproxEqRel(planet.max_elevation, planet.surface(100, 100).sea_level, 1e-6);
+}
+
+test "the ground follows the terrain and the sea, below the global floor" {
+    const planet = try Planet.create(std.testing.allocator, earth);
+    defer planet.destroy();
+    const s = planet.surface(100, 55);
+    var land = false;
+    var sea = false;
+    for (0..64) |i| {
+        const angle = @as(f64, @floatFromInt(i)) * 0.4;
+        const direction = normalize(.{ @cos(angle), @sin(angle * 0.7), @sin(angle) });
+        const ground = planet.groundAt(100, 55, direction);
+        const e: f32 = @floatCast(elevation(earth, direction));
+        try std.testing.expectEqual(1 + s.scale * @max(e, s.sea_level), ground);
+        try std.testing.expect(ground < s.floor_radius);
+        land = land or e > s.sea_level;
+        sea = sea or e < s.sea_level;
+    }
+    try std.testing.expect(land and sea);
+    // A smooth ball's ground is radius 1.
+    try std.testing.expectEqual(1, planet.groundAt(0, 55, .{ 0, 0, 1 }));
 }
 
 test "the peak is the highest coarse vertex" {

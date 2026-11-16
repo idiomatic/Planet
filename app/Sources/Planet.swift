@@ -40,6 +40,12 @@ final class Planet: @unchecked Sendable {
     }
 
     var vertexCount: Int { Int(pl_planet_vertex_count(handle)) }
+    /// The surface in `direction`, in radii: the terrain there (or the sea), as `view` shows it.
+    func ground(in direction: SIMD3<Float>, _ view: ViewValues) -> Float {
+        var d = [direction.x, direction.y, direction.z]
+        return pl_planet_ground_at(handle, view.exaggeration, view.seaLevel, &d)
+    }
+
     /// The coarse mesh's highest vertex, on the unit sphere.
     var peak: SIMD3<Float> {
         var out: (Float, Float, Float) = (0, 0, 0)

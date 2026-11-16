@@ -35,8 +35,24 @@ final class Renderer: NSObject, MTKViewDelegate {
     private var scale: Float { surface.scale }
     /// Sea level, in meters.
     private var seaLevel: Float { surface.sea_level }
-    /// The camera stays at least this far from the center, in radii: above the highest point.
-    var floorRadius: Float { surface.floor_radius }
+    /// Above the highest point, in radii: the demo's flight keeps to it.
+    var globalFloorRadius: Float { surface.floor_radius }
+    /// The surface under the camera, in radii.
+    private var groundRadius: Float { planet.ground(in: position, values) }
+    /// The camera stays at least this far from the center, in radii: above the terrain under it,
+    /// by more than the drawn mesh departs from it between vertices (or a little, at relief 0).
+    private var floorRadius: Float { max(groundRadius + scale * Renderer.groundMargin, 1 + 2e-6) }
+    /// Above the ground, in meters of elevation, for the camera's floor.
+    private static let groundMargin: Float = 20
+    /// Altitude above the ground under the camera, in radii, for flight speed, zoom steps, and
+    /// the near plane: at the floor, it's the margin, so the camera flies away at a sensible pace.
+    private var altitude: Float { max(length(position) - groundRadius, Renderer.minimumAltitude) }
+
+    /// Keeps the camera above the terrain under it.
+    private func keepAboveFloor() {
+        let floor = floorRadius
+        if length(position) < floor { position = normalize(position) * floor }
+    }
     private var viewportHeight: Float = 800
 
     private var position = SIMD3<Float>(0, 0, 3)
@@ -69,9 +85,9 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// The speed Space restores after pausing.
     private var lastTimeSpeed = 360_000.0
 
-    /// Altitude, in radii, below which flight and zoom stop slowing (~3 km at Earth's radius),
-    /// so the camera can leave the floor quickly.
-    private static let minimumAltitude: Float = 5e-4
+    /// Altitude, in radii, below which flight and zoom stop slowing (~13 m at Earth's radius):
+    /// low enough to fly among the finest detail, and speed still grows with altitude from there.
+    private static let minimumAltitude: Float = 2e-6
 
     private struct Uniforms {
         var viewProjection: simd_float4x4
@@ -199,7 +215,7 @@ final class Renderer: NSObject, MTKViewDelegate {
         patches.seaLevel = surface.sea_level
         patches.targetPixels = Float(values.detail)
         patches.capacityBytes = Int(values.cacheMegabytes * 1_000_000)
-        if length(position) < floorRadius { position = normalize(position) * floorRadius }
+        keepAboveFloor()
         applied = values
         setNeedsRedraw()
     }
@@ -271,10 +287,9 @@ final class Renderer: NSObject, MTKViewDelegate {
 
     /// Moves along the view direction by a fraction of the altitude: positive `amount` moves in.
     func zoom(_ amount: Float) {
-        let altitude = max(length(position) - floorRadius, Renderer.minimumAltitude)
         let step = altitude * (1 - exp(-amount))
         position += orientation.act(SIMD3(0, 0, -1)) * step
-        if length(position) < floorRadius { position = normalize(position) * floorRadius }
+        keepAboveFloor()
         setNeedsRedraw()
     }
 
@@ -325,7 +340,7 @@ final class Renderer: NSObject, MTKViewDelegate {
     /// (or +y when looking straight down), and sets the simulated time.
     func place(_ camera: Camera) {
         position = camera.position
-        if length(position) < floorRadius { position = normalize(position) * floorRadius }
+        keepAboveFloor()
         let forward = normalize(camera.target - camera.position)
         let up = normalize(camera.position)
         let reference = abs(dot(forward, up)) > 0.99 ? SIMD3<Float>(0, 1, 0) : up
@@ -408,9 +423,10 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
         guard let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
         encoder.setFragmentTexture(transmittance, index: 0)
-        let altitude = length(position) - floorRadius
         let fovY = Float(values.fieldOfView * .pi / 180)
-        let projection = simd_float4x4(perspectiveFovY: fovY, aspect: aspect, near: max(altitude * 0.5, 1e-6))
+        // Near enough for slopes rising ahead of a camera that follows the ground; reverse Z
+        // keeps the depth precise however near.
+        let projection = simd_float4x4(perspectiveFovY: fovY, aspect: aspect, near: max(altitude * 0.02, 1e-7))
         let view = simd_float4x4(orientation.inverse) * simd_float4x4(translation: -position)
         let viewProjection = projection * view
         let pixelsPerRadian = viewportHeight / (2 * tan(fovY / 2))
@@ -491,8 +507,8 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
         let local = SIMD3(axis("d", "a"), axis("r", "f"), axis("s", "w"))
         guard local != .zero else { return }
-        let speed = max(length(position) - floorRadius, Renderer.minimumAltitude) * (boost ? 4 : 1)
+        let speed = altitude * (boost ? 4 : 1)
         position += orientation.act(normalize(local)) * speed * dt
-        if length(position) < floorRadius { position = normalize(position) * floorRadius }
+        keepAboveFloor()
     }
 }

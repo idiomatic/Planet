@@ -53,11 +53,11 @@ Live parameters (the View section), which change only the view, so they apply as
 * exposure (default 0.25) and vertical field of view (whole degrees, 5–150; default 60)
 * planet radius (whole percent of Earth, 1–100,000; last, and disabled in the sidebar, so set only by `--radius`): the core's Earth-scale elevations scale with it, so it changes only lengths in kilometers (readouts), not the view
 
-The core turns relief and sea level into the surface as shown (`pl_planet_surface`): radii per meter of elevation, sea level in meters, the camera's floor, and the planet radius and top the air sees. Exaggeration and sea level move the surface, so changing them refits the cached patches' bounds and skirts and keeps the camera above the new floor; the rest only redraw. The live values are one observed model (`ViewSettings`) that the sidebar binds to, the keys change, and the renderer watches and clamps (not in a `didSet`, which under `@Observable` recurses).
+The core turns relief and sea level into the surface as shown (`pl_planet_surface`): radii per meter of elevation, sea level in meters, the global floor (above the highest peak, for the demo's flight), and the planet radius and top the air sees; and the ground in any direction (`pl_planet_ground_at`). Exaggeration and sea level move the surface, so changing them refits the cached patches' bounds and skirts and keeps the camera above the new floor; the rest only redraw. The live values are one observed model (`ViewSettings`) that the sidebar binds to, the keys change, and the renderer watches and clamps (not in a `didSet`, which under `@Observable` recurses).
 
 ## Viewer
 
-* simplified flight controls: drag to look; the scroll wheel or trackpad zooms along the view direction, by a fraction of the altitude; W/S, A/D, and R/F move; Q/E roll; Shift is faster; speed scales with altitude; the camera stays above the terrain
+* simplified flight controls: drag to look; the scroll wheel or trackpad zooms along the view direction, by a fraction of the altitude; W/S, A/D, and R/F move; Q/E roll; Shift is faster; speed scales with altitude above the ground under the camera (at least ~13 m, so at the floor it's 20 m/s at Earth's relief); the camera stays 20 m (of elevation, so scaled by the relief) above the ground under it, which covers the drawn mesh's departure from the elevation between vertices; the near plane is 2% of the altitude, for slopes rising ahead
 * time speed (%, default 360,000%, i.e., an hour per second; 0 pauses): `,` and `.` divide and multiply it by 10, stepping between 1% and 0; Space pauses and resumes at the last nonzero speed
 * M (or `--mesh on`) toggles drawing the mesh's edges over the surface; B (or `--lod-blend off`) toggles LOD blending; H turns the air off and on, `[` and `]` adjust its density, and `-` and `=` adjust the relief
 * draws only when something changes: continuously while a movement key is held (up to 120 fps) or time runs (30 fps), otherwise once per change (drag, scroll, toggle, resize, or a newly generated patch); idle with time paused uses no CPU
@@ -77,7 +77,7 @@ The core turns relief and sea level into the surface as shown (`pl_planet_surfac
 
 ## Patches (view-dependent rendering)
 
-* the renderer draws patches, not the coarse mesh: a patch is an icosphere triangle named by level (0–8), base face, and path, drawn as 4 more levels (a 256-triangle lattice), so the finest reach level 12 (~1.6 km)
+* the renderer draws patches, not the coarse mesh: a patch is an icosphere triangle named by level (0–12), base face, and path, drawn as 4 more levels (a 256-triangle lattice), so the finest reach level 16 (~100 m)
 * the core generates a patch as a pure, thread-safe function of the planet's parameters and its name (`pl_patch_generate`), with the coarse mesh's midpoint normalizations, so shared vertices agree bit for bit; each vertex carries direction, elevation, tangential elevation gradient (exact, by the chain rule through the noise and warp, so a vertex shades alike in every patch), a skirt flag, and the elevation and gradient the parent patch shows there (its own at points the parent shares; the average of the parent edge's ends at edge midpoints); given the parent's vertices, it copies the points they share (every other lattice point, 45 of 153) instead of computing them, with the same result for about 30% less work (the app copies the parent's at request time, since it may be evicted before a background task runs)
 * selection, the cache's bookkeeping, the base patches, and synchronous generation (with its timing) are the core's (`pl_lod_*`, not thread-safe); the app lends a Metal buffer per slot through two callbacks (acquire, release) made only during the core's calls on the main thread, generates the patches the core requests in background tasks at utility priority (so macOS can schedule them on efficiency cores), installs them as they arrive (copied in), and draws what the core selects
 * each frame, selection starts at the 20 base faces, culls patches outside the frustum or behind the horizon, and refines a patch into its 4 children while its triangles would exceed 12 pixels
@@ -98,7 +98,7 @@ The core turns relief and sea level into the surface as shown (`pl_planet_surfac
 
 ## Elevation (placeholder until tectonics)
 
-* domain-warped fractal value noise of the seed, 13 octaves (finest ~1 km); region scale divides its base frequency
+* domain-warped fractal value noise of the seed, 17 octaves (finest ~60 m; the same at every level, so shared vertices agree and the gradient stays exact); region scale divides its base frequency
 
 ## Orbit
 

@@ -26,17 +26,22 @@ uint32_t pl_planet_vertex_count(const pl_planet *planet); // of the coarse mesh
 typedef struct {
     float scale;             // radii per meter of elevation, with exaggeration
     float sea_level;         // meters
-    float floor_radius;      // radii: the camera stays above the highest point
+    float floor_radius;      // radii: above the highest point (for the demo's flight)
     float air_planet_radius; // meters: the planet the air sees (relief taken as at least 100%)
     float air_top;           // radii: the top of the air
 } pl_surface;
 
 pl_surface pl_planet_surface(const pl_planet *planet, double exaggeration, double sea_level);
+// The surface in `direction`, in radii: the elevation there (or the sea, if higher), as the
+// view shows it. The drawn mesh departs from it between vertices, by about a meter at the
+// finest level.
+float pl_planet_ground_at(const pl_planet *planet, double exaggeration, double sea_level,
+                          const float direction[3]);
 void pl_planet_peak(const pl_planet *planet, float out[3]); // highest coarse vertex, unit
 float pl_planet_min_elevation(const pl_planet *planet);
 float pl_planet_max_elevation(const pl_planet *planet);
 
-// Patches: triangles of the subdivided icosahedron, named by level (0–8), base face (0...19),
+// Patches: triangles of the subdivided icosahedron, named by level (0–12), base face (0...19),
 // and path (one child index, 0...3, per level, most significant first), each drawn as a fixed
 // lattice of finer triangles.
 uint32_t pl_patch_float_count(void); // per patch: 12 per vertex
