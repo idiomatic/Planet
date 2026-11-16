@@ -111,7 +111,8 @@ static float2 transmittanceUV(float h, float mu, float R) {
     float horizon = sqrt(atmosphereHeight * (2 * R + atmosphereHeight)); // top² − R², rooted
     float rho = sqrt(h * (2 * R + h));                                    // r² − R², rooted
     float r = R + h;
-    float d = max(-r * mu + sqrt(max((atmosphereHeight - h) * (2 * R + atmosphereHeight + h) + r * r * mu * mu, 0.0)), 0.0);
+    float topSquared = (atmosphereHeight - h) * (2 * R + atmosphereHeight + h); // top² − r²
+    float d = max(-r * mu + sqrt(max(topSquared + r * r * mu * mu, 0.0)), 0.0);
     float dMin = atmosphereHeight - h;
     float dMax = rho + horizon;
     float2 x = float2(dMax > dMin ? (d - dMin) / (dMax - dMin) : 0, rho / horizon);
@@ -211,7 +212,8 @@ static Scattering scatter(float3 origin, float3 direction, float maxDistance, fl
     float g2 = mieG * mieG;
     float miePhase = 3 / (8 * M_PI_F) * (1 - g2) * (1 + mu * mu)
         / ((2 + g2) * pow(1 + g2 - 2 * mieG * mu, 1.5));
-    result.inscattered = sunIntensity * (rayleigh * rayleighScattering * rayleighPhase + mie * mieScattering * miePhase);
+    result.inscattered = sunIntensity
+        * (rayleigh * rayleighScattering * rayleighPhase + mie * mieScattering * miePhase);
     result.transmittance = extinction(depth);
     return result;
 }

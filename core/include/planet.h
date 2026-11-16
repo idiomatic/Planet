@@ -39,13 +39,12 @@ float pl_planet_max_elevation(const pl_planet *planet);
 // Patches: triangles of the subdivided icosahedron, named by level (0–8), base face (0...19),
 // and path (one child index, 0...3, per level, most significant first), each drawn as a fixed
 // lattice of finer triangles.
-uint32_t pl_patch_vertex_count(void);
-uint32_t pl_patch_float_count(void); // per patch: vertex count × 12
+uint32_t pl_patch_float_count(void); // per patch: 12 per vertex
 uint32_t pl_patch_surface_index_count(void); // the surface's indices come first...
 uint32_t pl_patch_index_count(void);         // ...then the skirts'
 void pl_patch_indices(uint32_t *out);        // shared by every patch
 
-// Writes pl_patch_vertex_count() vertices of 12 floats: unit direction (3), elevation in
+// Writes a patch's vertices (pl_patch_float_count() floats), 12 floats each: unit direction (3), elevation in
 // meters, tangential elevation gradient in meters per radian (3), skirt (0 or 1), and the
 // elevation (1) and gradient (3) the parent patch shows there, for blending between levels.
 // Pure and thread-safe.

@@ -66,7 +66,8 @@ enum Video {
             // evicted patches' buffers and finished frames' objects would pile up.
             autoreleasepool {
                 renderer.place(flight.camera(at: Double(i) / Double(frames)))
-                guard renderer.renderOffscreen(pass) != nil, let commands = queue.makeCommandBuffer() else { fail("render") }
+                guard renderer.renderOffscreen(pass) != nil, let commands = queue.makeCommandBuffer()
+                else { fail("render") }
                 scaler.encode(commandBuffer: commands, sourceTexture: source, destinationTexture: target)
                 commands.commit()
                 commands.waitUntilCompleted()
@@ -84,7 +85,8 @@ enum Video {
                     mipmapLevel: 0
                 )
                 CVPixelBufferUnlockBaseAddress(buffer, [])
-                guard adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps)))
+                let time = CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps))
+                guard adaptor.append(buffer, withPresentationTime: time)
                 else { fail("append: \(writer.error?.localizedDescription ?? "")") }
 
                 if (i + 1) % (fps * 10) == 0 || i + 1 == frames {

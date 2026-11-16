@@ -101,7 +101,8 @@ pub const Planet = struct {
         // terrain (down to a smooth ball, at 0) leaves Earth's air, which also keeps the air
         // thick enough in radii for single-precision heights near radius 1.
         const air_scale: f32 = @floatCast(@max(exaggeration, 100) / 100 / earth_radius);
-        const sea: f32 = self.min_elevation + @as(f32, @floatCast(sea_level / 100)) * (self.max_elevation - self.min_elevation);
+        const range = self.max_elevation - self.min_elevation;
+        const sea: f32 = self.min_elevation + @as(f32, @floatCast(sea_level / 100)) * range;
         return .{
             .scale = scale,
             .sea_level = sea,
@@ -124,7 +125,6 @@ pub const Planet = struct {
         var arena = self.arena;
         arena.deinit();
     }
-
 };
 
 /// The unit vector toward the sun in the planet's frame, `seconds` after epoch: a pure function
@@ -218,9 +218,9 @@ const Mesh = struct {
 
     const phi = (1.0 + @sqrt(5.0)) / 2.0;
     const base_points = [12]Vec{
-        .{ -1, phi, 0 },  .{ 1, phi, 0 },  .{ -1, -phi, 0 }, .{ 1, -phi, 0 },
-        .{ 0, -1, phi },  .{ 0, 1, phi },  .{ 0, -1, -phi }, .{ 0, 1, -phi },
-        .{ phi, 0, -1 },  .{ phi, 0, 1 },  .{ -phi, 0, -1 }, .{ -phi, 0, 1 },
+        .{ -1, phi, 0 }, .{ 1, phi, 0 }, .{ -1, -phi, 0 }, .{ 1, -phi, 0 },
+        .{ 0, -1, phi }, .{ 0, 1, phi }, .{ 0, -1, -phi }, .{ 0, 1, -phi },
+        .{ phi, 0, -1 }, .{ phi, 0, 1 }, .{ -phi, 0, -1 }, .{ -phi, 0, 1 },
     };
     const base_faces = [20][3]u32{
         .{ 0, 11, 5 }, .{ 0, 5, 1 },  .{ 0, 1, 7 },   .{ 0, 7, 10 }, .{ 0, 10, 11 },
@@ -626,10 +626,6 @@ export fn pl_planet_max_elevation(handle: *const Handle) f32 {
     return planetOf(handle).max_elevation;
 }
 
-export fn pl_patch_vertex_count() u32 {
-    return patch_vertices;
-}
-
 export fn pl_patch_float_count() u32 {
     return lod.patch_floats;
 }
@@ -647,7 +643,14 @@ export fn pl_patch_indices(out: [*]u32) void {
 }
 
 /// Thread-safe: reads only the planet's immutable parameters.
-export fn pl_patch_generate(handle: *const Handle, level: u32, face: u32, path: u64, parent: ?[*]const f32, out: [*]f32) void {
+export fn pl_patch_generate(
+    handle: *const Handle,
+    level: u32,
+    face: u32,
+    path: u64,
+    parent: ?[*]const f32,
+    out: [*]f32,
+) void {
     const planet = planetOf(handle);
     const from: ?[]const f32 = if (parent) |v| v[0..lod.patch_floats] else null;
     generatePatchFrom(planet.params, @intCast(level), @intCast(face), path, from, out[0..lod.patch_floats]);

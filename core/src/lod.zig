@@ -161,7 +161,8 @@ pub const Lod = struct {
     /// The cached parent's vertices, if any, to generate a child from.
     pub fn parentVertices(self: *const Lod, key: Key) ?[*]const f32 {
         if (key.level == 0) return null;
-        const slot = self.index.get(.{ .level = key.level - 1, .face = key.face, .path = key.path >> 2 }) orelse return null;
+        const parent: Key = .{ .level = key.level - 1, .face = key.face, .path = key.path >> 2 };
+        const slot = self.index.get(parent) orelse return null;
         return self.slots.items(.vertices)[slot];
     }
 
@@ -184,7 +185,8 @@ pub const Lod = struct {
         } else {
             const start = now();
             const parent: ?[]const f32 = if (self.parentVertices(key)) |v| v[0..patch_floats] else null;
-            core.generatePatchFrom(self.params, @intCast(key.level), @intCast(key.face), key.path, parent, out[0..patch_floats]);
+            const level: u5 = @intCast(key.level);
+            core.generatePatchFrom(self.params, level, @intCast(key.face), key.path, parent, out[0..patch_floats]);
             self.generation_ns += now() - start;
         }
         self.slots.set(slot, .{
