@@ -8,6 +8,7 @@ const Vec = [3]f64;
 
 pub const coarse_level: u5 = build_options.coarse_level;
 
+const earth_radius = 6_371_000.0; // meters
 const earth_day = 86_400.0; // seconds
 const earth_year = 365.25 * earth_day;
 const elevation_amplitude = 8_000.0; // meters
@@ -22,6 +23,27 @@ pub const Params = extern struct {
         p.region_scale = @max(p.region_scale, 1.0);
         return p;
     }
+};
+
+/// Above the highest coarse vertex, in meters, for detail finer than the coarse mesh.
+const floor_margin = 500.0;
+/// How high the air reaches, in Earth's meters (scaled with the air's scale).
+const atmosphere_height = 60_000.0;
+
+/// The surface as the view shows it: lengths in radii of the planet as displayed.
+pub const Surface = extern struct {
+    /// Radii per meter of elevation, with exaggeration. Relief is relative to the planet's own
+    /// radius (its Earth-scale elevations scale with it), so 100% gives Earth's proportions.
+    scale: f32,
+    /// Sea level, in meters.
+    sea_level: f32,
+    /// The camera stays at least this far from the center, in radii: above the highest point.
+    floor_radius: f32,
+    /// The radius of the planet the air sees, in meters: the true radius divided by the
+    /// exaggeration (at least 100%), so the air's thickness keeps its proportion to the relief.
+    air_planet_radius: f32,
+    /// The top of the air, in radii.
+    air_top: f32,
 };
 
 pub const Planet = struct {
@@ -69,6 +91,24 @@ pub const Planet = struct {
         };
         planet.arena = arena;
         return planet;
+    }
+
+    /// The surface as the view shows it, with relief exaggerated `exaggeration` percent and the
+    /// sea at `sea_level` percent of the elevation range.
+    pub fn surface(self: *const Planet, exaggeration: f64, sea_level: f64) Surface {
+        const scale: f32 = @floatCast(exaggeration / 100 / earth_radius);
+        // The air's scale: the display's, but never below relief 100%, so flattening the
+        // terrain (down to a smooth ball, at 0) leaves Earth's air, which also keeps the air
+        // thick enough in radii for single-precision heights near radius 1.
+        const air_scale: f32 = @floatCast(@max(exaggeration, 100) / 100 / earth_radius);
+        const sea: f32 = self.min_elevation + @as(f32, @floatCast(sea_level / 100)) * (self.max_elevation - self.min_elevation);
+        return .{
+            .scale = scale,
+            .sea_level = sea,
+            .floor_radius = 1 + scale * (@max(self.max_elevation, sea) + floor_margin) + 1e-5,
+            .air_planet_radius = 1 / air_scale,
+            .air_top = 1 + atmosphere_height * air_scale,
+        };
     }
 
     /// The coarse mesh's highest vertex, on the unit sphere (the first, on a tie).
@@ -563,6 +603,10 @@ export fn pl_planet_indices(handle: *const Handle) [*]const u32 {
     return planetOf(handle).indices.ptr;
 }
 
+export fn pl_planet_surface(handle: *const Handle, exaggeration: f64, sea_level: f64) Surface {
+    return planetOf(handle).surface(exaggeration, sea_level);
+}
+
 export fn pl_planet_peak(handle: *const Handle, out: *[3]f32) void {
     out.* = planetOf(handle).peak();
 }
@@ -850,6 +894,23 @@ test "a day or year length of 0 stops the spin or the orbit" {
     const still = sunFromOrbit(23.44, 0, 0, 1e7);
     const start = sunFromOrbit(23.44, 0, 0, 0);
     for (0..3) |k| try std.testing.expectEqual(start[k], still[k]);
+}
+
+test "the surface scales with relief, but the air not below Earth's" {
+    const planet = try Planet.create(std.testing.allocator, earth);
+    defer planet.destroy();
+    const real = planet.surface(100, 55);
+    try std.testing.expectEqual(@as(f32, 1.0 / earth_radius), real.scale);
+    try std.testing.expectEqual(@as(f32, earth_radius), real.air_planet_radius);
+    try std.testing.expect(real.floor_radius > 1 + real.scale * planet.max_elevation);
+    const flat = planet.surface(0, 55);
+    try std.testing.expectEqual(0, flat.scale);
+    try std.testing.expectEqual(real.air_planet_radius, flat.air_planet_radius);
+    try std.testing.expectEqual(real.air_top, flat.air_top);
+    const tall = planet.surface(5000, 55);
+    try std.testing.expectApproxEqRel(real.air_planet_radius / 50, tall.air_planet_radius, 1e-6);
+    try std.testing.expectEqual(planet.min_elevation, planet.surface(100, 0).sea_level);
+    try std.testing.expectApproxEqRel(planet.max_elevation, planet.surface(100, 100).sea_level, 1e-6);
 }
 
 test "the peak is the highest coarse vertex" {

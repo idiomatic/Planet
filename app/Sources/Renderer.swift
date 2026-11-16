@@ -29,28 +29,14 @@ final class Renderer: NSObject, MTKViewDelegate {
     private let depthState: MTLDepthStencilState
     let patches: PatchCache
     private var values: ViewValues { settings.values }
-    /// Radii per meter of the core's elevation, with exaggeration. Relief is relative to the
-    /// planet's own radius (the core's Earth-scale elevations scale with it), so the radius
-    /// doesn't enter: 100% gives Earth's proportions at any size.
-    private var scale: Float { Renderer.scale(values) }
-
-    /// The air's scale: the display's, but never below relief 100%, so flattening the terrain
-    /// (down to a smooth ball, at 0) leaves Earth's air, which also keeps the air thick enough
-    /// in radii for single-precision heights near radius 1.
-    private var airScale: Float {
-        var values = values
-        values.exaggeration = max(values.exaggeration, 100)
-        return Renderer.scale(values)
-    }
-
-    private static func scale(_ values: ViewValues) -> Float {
-        Float(values.exaggeration / 100 / ViewValues.earth.radius)
-    }
+    /// The surface as shown: scale, sea level, floor, and the air's extent (`pl_planet_surface`).
+    private var surface: pl_surface { planet.surface(values) }
+    /// Radii per meter of the core's elevation, with exaggeration.
+    private var scale: Float { surface.scale }
     /// Sea level, in meters.
-    private var seaLevel: Float { planet.seaLevel(percent: values.seaLevel) }
-    /// The camera stays at least this far from the center, in radii: above the highest point,
-    /// with a margin for detail finer than the coarse mesh.
-    var floorRadius: Float { 1 + scale * (max(planet.maxElevation, seaLevel) + 500) + 1e-5 }
+    private var seaLevel: Float { surface.sea_level }
+    /// The camera stays at least this far from the center, in radii: above the highest point.
+    var floorRadius: Float { surface.floor_radius }
     private var viewportHeight: Float = 800
 
     private var position = SIMD3<Float>(0, 0, 3)
@@ -100,9 +86,6 @@ final class Renderer: NSObject, MTKViewDelegate {
         var atmosphere: SIMD4<Float>
     }
 
-    /// The air's thickness above sea level, in meters.
-    private static let atmosphereHeight: Float = 60_000
-
     private let skyPipeline: MTLRenderPipelineState
     private let skyDepthState: MTLDepthStencilState
 
@@ -138,9 +121,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         else { return nil }
 
         let values = settings.values
+        let surface = planet.surface(values)
         guard let patches = PatchCache(
-            planet: planet, device: device, scale: Renderer.scale(values),
-            seaLevel: planet.seaLevel(percent: values.seaLevel))
+            planet: planet, device: device, scale: surface.scale, seaLevel: surface.sea_level)
         else { return nil }
         patches.targetPixels = Float(values.detail)
         patches.capacityBytes = Int(values.cacheMegabytes * 1_000_000)
@@ -185,8 +168,9 @@ final class Renderer: NSObject, MTKViewDelegate {
         }
         if values.airDensity > 0 { settings.lastAirDensity = values.airDensity }
         guard values != applied else { return }
-        patches.scale = scale
-        patches.seaLevel = seaLevel
+        let surface = surface
+        patches.scale = surface.scale
+        patches.seaLevel = surface.sea_level
         patches.targetPixels = Float(values.detail)
         patches.capacityBytes = Int(values.cacheMegabytes * 1_000_000)
         if length(position) < floorRadius { position = normalize(position) * floorRadius }
@@ -402,10 +386,10 @@ final class Renderer: NSObject, MTKViewDelegate {
             display: SIMD4(scale, 0, 0, 0),
             camera: SIMD4(position, Float(values.airDensity)),
             lod: SIMD4(pixelsPerRadian, patches.targetPixels, blendLevels ? 1 : 0, 0.5),
-            // The air sees a planet of radius 1 / scale meters, so its thickness keeps its
-            // proportion to the exaggerated relief (but not below Earth's: see airScale).
+            // The air sees a smaller planet, so its thickness keeps its proportion to the
+            // exaggerated relief (but not below Earth's).
             atmosphere: SIMD4(
-                values.airDensity > 0 ? 1 : 0, 1 / airScale, 1 + Renderer.atmosphereHeight * airScale,
+                values.airDensity > 0 ? 1 : 0, surface.air_planet_radius, surface.air_top,
                 Float(values.exposure))
         )
         let visible = patches.select(PatchView(

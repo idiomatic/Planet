@@ -26,6 +26,17 @@ const uint64_t *pl_planet_addresses(const pl_planet *planet);
 uint32_t pl_planet_index_count(const pl_planet *planet);
 const uint32_t *pl_planet_indices(const pl_planet *planet);
 
+// The surface as the view shows it, with relief exaggerated `exaggeration` percent and the sea
+// at `sea_level` percent of the elevation range; lengths in radii of the displayed planet.
+typedef struct {
+    float scale;             // radii per meter of elevation, with exaggeration
+    float sea_level;         // meters
+    float floor_radius;      // radii: the camera stays above the highest point
+    float air_planet_radius; // meters: the planet the air sees (relief taken as at least 100%)
+    float air_top;           // radii: the top of the air
+} pl_surface;
+
+pl_surface pl_planet_surface(const pl_planet *planet, double exaggeration, double sea_level);
 void pl_planet_peak(const pl_planet *planet, float out[3]); // highest coarse vertex, unit
 float pl_planet_min_elevation(const pl_planet *planet);
 float pl_planet_max_elevation(const pl_planet *planet);

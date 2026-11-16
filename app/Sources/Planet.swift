@@ -46,9 +46,9 @@ final class Planet: @unchecked Sendable {
     var minElevation: Float { pl_planet_min_elevation(handle) }
     var maxElevation: Float { pl_planet_max_elevation(handle) }
 
-    /// Sea level in meters, at `percent` of the surface elevation range.
-    func seaLevel(percent: Double) -> Float {
-        minElevation + Float(percent / 100) * (maxElevation - minElevation)
+    /// The surface as `view` shows it: scale, sea level, floor, and the air's extent.
+    func surface(_ view: ViewValues) -> pl_surface {
+        pl_planet_surface(handle, view.exaggeration, view.seaLevel)
     }
 
     /// Writes the patch's vertices; `out` holds pl_patch_vertex_count() × 12 floats.

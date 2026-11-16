@@ -53,7 +53,7 @@ Live parameters (the View section), which change only the view, so they apply as
 * exposure (default 0.25) and vertical field of view (whole degrees, 5–150; default 60)
 * planet radius (whole percent of Earth, 1–100,000; last, and disabled in the sidebar, so set only by `--radius`): the core's Earth-scale elevations scale with it, so it changes only lengths in kilometers (readouts), not the view
 
-Exaggeration and sea level move the surface, so changing them refits the cached patches' bounds and skirts and keeps the camera above the new floor; the rest only redraw. The live values are one observed model (`ViewSettings`) that the sidebar binds to, the keys change, and the renderer watches and clamps (not in a `didSet`, which under `@Observable` recurses).
+The core turns relief and sea level into the surface as shown (`pl_planet_surface`): radii per meter of elevation, sea level in meters, the camera's floor, and the planet radius and top the air sees. Exaggeration and sea level move the surface, so changing them refits the cached patches' bounds and skirts and keeps the camera above the new floor; the rest only redraw. The live values are one observed model (`ViewSettings`) that the sidebar binds to, the keys change, and the renderer watches and clamps (not in a `didSet`, which under `@Observable` recurses).
 
 ## Viewer
 
