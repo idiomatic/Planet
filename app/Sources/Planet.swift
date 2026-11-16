@@ -34,6 +34,11 @@ final class Planet: @unchecked Sendable {
         pl_planet_destroy(handle)
     }
 
+    /// Lends the core's planet to `body`, which mustn't keep it beyond this planet's life.
+    func withHandle<T>(_ body: (OpaquePointer) -> T) -> T {
+        body(handle)
+    }
+
     var vertexCount: Int { Int(pl_planet_vertex_count(handle)) }
     /// The coarse mesh's highest vertex, on the unit sphere.
     var peak: SIMD3<Float> {

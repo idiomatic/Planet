@@ -651,9 +651,14 @@ fn lodOf(handle: *LodHandle) *lod.Lod {
     return @ptrCast(@alignCast(handle));
 }
 
-export fn pl_lod_create(scale: f32, sea_level: f32) ?*LodHandle {
+export fn pl_lod_create(planet: *const Handle, storage: *const lod.Storage, scale: f32, sea_level: f32) ?*LodHandle {
     const self = std.heap.smp_allocator.create(lod.Lod) catch return null;
-    self.* = .init(std.heap.smp_allocator, scale, sea_level);
+    self.* = .init(std.heap.smp_allocator, planetOf(planet).params, storage.*, scale, sea_level);
+    self.prepare() catch {
+        self.deinit();
+        std.heap.smp_allocator.destroy(self);
+        return null;
+    };
     return @ptrCast(self);
 }
 
@@ -671,13 +676,13 @@ export fn pl_lod_set_detail(handle: *LodHandle, target_pixels: f32) void {
     lodOf(handle).target_pixels = target_pixels;
 }
 
-export fn pl_lod_set_capacity(handle: *LodHandle, patches: u32) void {
-    lodOf(handle).capacity = patches;
+export fn pl_lod_set_capacity_bytes(handle: *LodHandle, bytes: u64) void {
+    lodOf(handle).setCapacityBytes(bytes);
 }
 
-/// The slot, or -1 if the patch is already cached, or -2 if out of memory.
+/// The slot, or -1 if the patch is already cached, or -2 if out of memory or storage.
 export fn pl_lod_install(handle: *LodHandle, key: lod.Key, vertices: [*]const f32) i64 {
-    const slot = lodOf(handle).install(key, vertices) catch return -2;
+    const slot = lodOf(handle).install(key, vertices[0..lod.patch_floats]) catch return -2;
     return if (slot) |s| s else -1;
 }
 
@@ -691,8 +696,9 @@ export fn pl_lod_select(
     camera: *const [3]f32,
     pixels_per_radian: f32,
     max_in_flight: u32,
+    synchronous: bool,
 ) bool {
-    lodOf(handle).select(view_projection, camera.*, pixels_per_radian, max_in_flight) catch return false;
+    lodOf(handle).select(view_projection, camera.*, pixels_per_radian, max_in_flight, synchronous) catch return false;
     return true;
 }
 
@@ -704,12 +710,6 @@ export fn pl_lod_draws(handle: *LodHandle, count: *u32) [*]const lod.Draw {
 
 export fn pl_lod_requests(handle: *LodHandle, count: *u32) [*]const lod.Key {
     const items = lodOf(handle).requests.items;
-    count.* = @intCast(items.len);
-    return items.ptr;
-}
-
-export fn pl_lod_evicted(handle: *LodHandle, count: *u32) [*]const u32 {
-    const items = lodOf(handle).evicted.items;
     count.* = @intCast(items.len);
     return items.ptr;
 }
