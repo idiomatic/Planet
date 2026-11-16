@@ -67,6 +67,7 @@ The core turns relief and sea level into the surface as shown (`pl_planet_surfac
 * `--help` or `-h` prints usage and exits; an unknown switch prints usage to stderr and exits with status 2
 * `--snapshot <png>` instead renders one frame offscreen and exits
 * `--video <mp4>` instead renders a looping flight offscreen and encodes it (H.264 High, BT.709, default 1920×1080, 60 fps, 120 s, 12 Mbps; `--duration`, `--fps`, `--bitrate`, `--size`), rendering at 2× and scaling down with a Lanczos filter in sRGB; the flight holds the sun still and circles the subsolar point through the highest peak (the sun ~50° from its zenith), with periodic distance, altitude, and view, so it loops seamlessly
+* the offscreen modes (snapshot, video, benchmark) generate synchronously, and the video and benchmark loops drain an autorelease pool each frame, since they never return to the run loop (otherwise evicted patches' buffers pile up)
 * `--benchmark <frames>` instead renders frames offscreen (no window or vsync, default 2560×1600) from orbit to the surface, twice (cold, then warm from the cache), prints generation time, CPU time, frame times, fps, patch counts, and memory footprint, and exits
 
 ## Mesh

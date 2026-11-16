@@ -26,7 +26,11 @@ The benchmark path's working set is about 7,700 patches, more than the default c
 | 80 MB | 0 | 100% | 4.7 ms |
 | 200 MB | 0 | 100% | 4.7 ms |
 
-The cold pass is unchanged, since every patch must be generated once. Peak memory varied between runs (163–253 MB), mostly in the frames' Metal allocations rather than the cache.
+The cold pass is unchanged, since every patch must be generated once.
+
+## Offscreen memory
+
+The benchmark and video loops render frame after frame without returning to the run loop, so nothing drained the autorelease pool: evicted patches' Metal buffers and finished frames' objects piled up until exit, and peak memory grew with eviction (252 MB for the benchmark at the default cache, 303 MB for a 30-second 960×540 video). Draining a pool each frame halved both (126 and 127 MB), with identical frames. The interactive app's run loop drains its pool every event, so it was unaffected.
 
 ## Atmosphere
 

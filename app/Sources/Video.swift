@@ -62,34 +62,38 @@ enum Video {
         let flight = LoopingFlight(planet: planet, view: options.view, floor: renderer.floorRadius)
         let start = Date()
         for i in 0..<frames {
-            renderer.place(flight.camera(at: Double(i) / Double(frames)))
-            guard renderer.renderOffscreen(pass) != nil, let commands = queue.makeCommandBuffer() else { fail("render") }
-            scaler.encode(commandBuffer: commands, sourceTexture: source, destinationTexture: target)
-            commands.commit()
-            commands.waitUntilCompleted()
+            // Drained each frame: this loop never returns to the run loop, which would, so
+            // evicted patches' buffers and finished frames' objects would pile up.
+            autoreleasepool {
+                renderer.place(flight.camera(at: Double(i) / Double(frames)))
+                guard renderer.renderOffscreen(pass) != nil, let commands = queue.makeCommandBuffer() else { fail("render") }
+                scaler.encode(commandBuffer: commands, sourceTexture: source, destinationTexture: target)
+                commands.commit()
+                commands.waitUntilCompleted()
 
-            while !input.isReadyForMoreMediaData { Thread.sleep(forTimeInterval: 0.001) }
-            guard let pool = adaptor.pixelBufferPool else { fail("pool") }
-            var buffer: CVPixelBuffer?
-            CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)
-            guard let buffer else { fail("buffer") }
-            CVPixelBufferLockBaseAddress(buffer, [])
-            target.getBytes(
-                CVPixelBufferGetBaseAddress(buffer)!,
-                bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
-                from: MTLRegionMake2D(0, 0, width, height),
-                mipmapLevel: 0
-            )
-            CVPixelBufferUnlockBaseAddress(buffer, [])
-            guard adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps)))
-            else { fail("append: \(writer.error?.localizedDescription ?? "")") }
+                while !input.isReadyForMoreMediaData { Thread.sleep(forTimeInterval: 0.001) }
+                guard let pool = adaptor.pixelBufferPool else { fail("pool") }
+                var buffer: CVPixelBuffer?
+                CVPixelBufferPoolCreatePixelBuffer(nil, pool, &buffer)
+                guard let buffer else { fail("buffer") }
+                CVPixelBufferLockBaseAddress(buffer, [])
+                target.getBytes(
+                    CVPixelBufferGetBaseAddress(buffer)!,
+                    bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
+                    from: MTLRegionMake2D(0, 0, width, height),
+                    mipmapLevel: 0
+                )
+                CVPixelBufferUnlockBaseAddress(buffer, [])
+                guard adaptor.append(buffer, withPresentationTime: CMTime(value: CMTimeValue(i), timescale: CMTimeScale(fps)))
+                else { fail("append: \(writer.error?.localizedDescription ?? "")") }
 
-            if (i + 1) % (fps * 10) == 0 || i + 1 == frames {
-                let elapsed = Date().timeIntervalSince(start)
-                FileHandle.standardError.write(Data(String(
-                    format: "%d/%d frames, %.0f s elapsed, %d patches cached\n",
-                    i + 1, frames, elapsed, renderer.patches.cachedCount
-                ).utf8))
+                if (i + 1) % (fps * 10) == 0 || i + 1 == frames {
+                    let elapsed = Date().timeIntervalSince(start)
+                    FileHandle.standardError.write(Data(String(
+                        format: "%d/%d frames, %.0f s elapsed, %d patches cached\n",
+                        i + 1, frames, elapsed, renderer.patches.cachedCount
+                    ).utf8))
+                }
             }
         }
 

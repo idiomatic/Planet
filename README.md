@@ -109,7 +109,7 @@ On an Apple M2 at 2560×1600, flying from orbit to the surface:
 | GPU frame, with the atmosphere | 4.7 ms |
 | Patches drawn per frame | 574 |
 | Patch cache hit rate | 98% |
-| Peak memory | 119 MB |
+| Peak memory | 126 MB |
 | CPU idle, time paused / running | 0% / 2–4% |
 
 The atmosphere's raymarch is now most of the frame; a precomputed transmittance table (planned) would remove most of its cost. [docs/performance.md](docs/performance.md) has the full measurements.

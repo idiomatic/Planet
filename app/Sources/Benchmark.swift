@@ -49,9 +49,13 @@ enum Benchmark {
                     seconds: Double(i) * 3600
                 ))
                 let frameStart = Date()
-                guard let commands = renderer.renderOffscreen(pass) else { fail() }
+                // Drained each frame: this loop never returns to the run loop, which would.
+                let (gpuStart, gpuEnd) = autoreleasepool {
+                    guard let commands = renderer.renderOffscreen(pass) else { fail() }
+                    return (commands.gpuStartTime, commands.gpuEndTime)
+                }
                 wall.append(Date().timeIntervalSince(frameStart))
-                gpu.append(commands.gpuEndTime - commands.gpuStartTime)
+                gpu.append(gpuEnd - gpuStart)
                 drawn += renderer.patches.drawn
                 created += renderer.patches.generatedThisFrame
                 visited += renderer.patches.visited
